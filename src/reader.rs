@@ -1,6 +1,5 @@
 use crate::client::ClientResult;
-use crate::client::AMS_HEADER_SIZE;
-use ads_proto::proto::ams_header::AmsTcpHeader;
+use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::command_id::CommandID;
 use ads_proto::proto::proto_traits::ReadFrom;
 use ads_proto::proto::response::*;
@@ -12,6 +11,9 @@ use std::thread;
 
 type SenderTable = HashMap<u32, Sender<ClientResult<Response>>>;
 type SenderTableAdsNotification = HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>;
+
+//Tcp Header size without response data
+pub const AMS_HEADER_SIZE: usize = 38;
 
 pub fn run_reader_thread(
     stream: TcpStream,
@@ -37,30 +39,11 @@ pub fn run_reader_thread(
             }
 
             ams_header = ams_tcp_header.ams_header;
-            match ams_header.command_id() {
-                CommandID::DeviceNotification => {
-                    let ads_notification: AdsNotificationStream = ams_header
-                        .response()
-                        .expect("Not possible to extract response from AmsHeader!")
-                        .try_into()
-                        .expect("try_into AdsNotificationStream failed!");
-
-                    forward_ads_notification(
-                        &mut sender_table_device_notivication,
-                        &ams_header.invoke_id(),
-                        ads_notification,
-                    );
-                }
-                _ => {
-                    forward_response(
-                        &mut sender_table_general,
-                        &ams_header.invoke_id(),
-                        ams_header
-                            .response()
-                            .expect("Not possible to extract response from AmsHeader!"),
-                    );
-                }
-            }
+            forward_data(
+                &mut ams_header,
+                &mut sender_table_general,
+                &mut sender_table_device_notivication,
+            );
         }
     });
 }
@@ -96,6 +79,37 @@ fn read(tcp_stream: &TcpStream) -> ClientResult<AmsTcpHeader> {
         return Ok(AmsTcpHeader::read_from(&mut buf.as_slice())?);
     }
     Ok(ams_tcp_header)
+}
+
+fn forward_data(
+    ams_header: &mut AmsHeader,
+    sender_table_general: &mut SenderTable,
+    sender_table_device_notivication: &mut SenderTableAdsNotification,
+) {
+    match ams_header.command_id() {
+        CommandID::DeviceNotification => {
+            let ads_notification: AdsNotificationStream = ams_header
+                .response()
+                .expect("Not possible to extract response from AmsHeader!")
+                .try_into()
+                .expect("try_into AdsNotificationStream failed!");
+
+            forward_ads_notification(
+                sender_table_device_notivication,
+                &ams_header.invoke_id(),
+                ads_notification,
+            );
+        }
+        _ => {
+            forward_response(
+                sender_table_general,
+                &ams_header.invoke_id(),
+                ams_header
+                    .response()
+                    .expect("Not possible to extract response from AmsHeader!"),
+            );
+        }
+    }
 }
 
 fn forward_ads_notification(

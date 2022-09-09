@@ -19,8 +19,6 @@ pub const ADS_UDP_SERVER_PORT: u16 = 48899;
 pub const ADS_TCP_SERVER_PORT: u16 = 48898;
 /// ADS-Protocol port secured
 pub const ADS_SECURE_TCP_SERVER_PORT: u16 = 8016;
-//Tcp Header size without response data
-pub const AMS_HEADER_SIZE: usize = 38;
 
 pub type ClientResult<T> = Result<T, anyhow::Error>;
 type TxGeneral = Sender<(u32, Sender<ClientResult<Response>>)>;
