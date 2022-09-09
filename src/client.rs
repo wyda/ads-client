@@ -1,16 +1,16 @@
-use ads_proto::ads_services::system_services::*;
+use crate::reader::run_reader_thread;
 use ads_proto::error::AdsError;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
-use ads_proto::proto::ams_header::AmsHeader;
+use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::proto_traits::*;
 use ads_proto::proto::request::Request;
 use ads_proto::proto::response::Response;
+use ads_proto::proto::response::*;
 use ads_proto::proto::state_flags::StateFlags;
-use ads_proto::proto::sumup::sumup_request::SumupReadRequest;
-use ads_proto::proto::sumup::sumup_response::SumupReadResponse;
-use anyhow;
-use std::io::{self, Read, Write};
+use anyhow::{anyhow, Result};
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
 /// UDP ADS-Protocol port dicovery
@@ -23,6 +23,8 @@ pub const ADS_SECURE_TCP_SERVER_PORT: u16 = 8016;
 pub const AMS_HEADER_SIZE: usize = 38;
 
 pub type ClientResult<T> = Result<T, anyhow::Error>;
+type TxGeneral = Sender<(u32, Sender<ClientResult<Response>>)>;
+type TxNotification = Sender<(u32, Sender<ClientResult<AdsNotificationStream>>)>;
 
 #[derive(Debug)]
 pub struct Client {
@@ -30,8 +32,9 @@ pub struct Client {
     ams_targed_address: AmsAddress,
     ams_source_address: AmsAddress,
     stream: Option<TcpStream>,
-    ams_header: Option<AmsHeader>,
     invoke_id: u32,
+    tx_general: Option<TxGeneral>,
+    tx_notification: Option<TxNotification>,
 }
 
 impl Client {
@@ -41,66 +44,80 @@ impl Client {
             ams_targed_address,
             ams_source_address: AmsAddress::new(AmsNetId::from([0, 0, 0, 0, 0, 0]), 0),
             stream: None,
-            ams_header: None,
             invoke_id: 0,
+            tx_general: None,
+            tx_notification: None,
         }
     }
 
     pub fn connect(&mut self) -> ClientResult<()> {
-        if self.stream.is_some() {
-            return Ok(());
+        if self.stream.is_none() {
+            self.create_stream()?;
         }
 
+        if let Some(stream) = &self.stream {
+            self.ams_source_address
+                .update_from_socket_addr(stream.local_addr()?.to_string().as_str())?; //ToDo update when ads-proto 0.1.1
+
+            //ToDo check if thread is already started!
+            let (tx, rx) = channel::<(u32, Sender<ClientResult<Response>>)>();
+            let (tx_not, rx_not) = channel::<(u32, Sender<ClientResult<AdsNotificationStream>>)>();
+            self.tx_general = Some(tx);
+            self.tx_notification = Some(tx_not);
+            run_reader_thread(stream.try_clone()?, rx, rx_not);
+        }
+        Ok(())
+    }
+
+    fn create_stream(&self) -> ClientResult<TcpStream> {
         let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;
         stream.set_nodelay(true)?;
         stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
-        self.ams_source_address
-            .update_from_socket_addr(stream.local_addr()?.to_string().as_str())?; //ToDo update when ads-proto 0.1.1
-        self.stream = Some(stream);
-        Ok(())
+        Ok(stream)
     }
 
-    pub fn request(&self, request: Request) -> ClientResult<Response> {
-        let ams_header = self.update_ams_header(request, StateFlags::req_default());
-        let stream = self.get_stream()?;
-        stream.write_all(&mut self.create_byte_buffer(ams_header));
-        Ok(())
+    /// Sends a reqest to the remote device and returns a Result<Response>
+    /// Blocks until the response has been received or on error occured
+    /// Fails if no tcp stream is available.
+    pub fn request(&mut self, request: Request) -> ClientResult<Response> {
+        let rx = self.request_rx(request)?;
+        rx.recv()?
     }
 
-    //Private methodes
-
-    fn update_ams_header(&self, request: Request, state_flags: StateFlags) -> AmsHeader {
-        match self.ams_header {
-            Some(h) => {
-                h.update_data(request, StateFlags::req_default());
-                h
-            }
-            None => {
-                self.ams_header = Some(AmsHeader::new(
-                    self.ams_targed_address,
-                    self.ams_source_address,
-                    StateFlags::req_default(),
-                    self.invoke_id,
-                    request,
-                ));
-                self.ams_header.expect("self.ams_header is None!")
-            }
-        }
-    }
-
-    fn get_stream(&self) -> ClientResult<TcpStream> {
-        match self.stream {
-            Some(s) => Ok(s),
-            None => {
-                self.connect()?;
-                Ok(self.stream.expect("stream is none!"))
-            }
-        }
-    }
-
-    fn create_byte_buffer(&self, ams_header: AmsHeader) -> Vec<u8> {
+    /// Sends a reqest to the remote device
+    /// and returns imediatly a receiver object to read from (mpsc::Receiver).
+    /// Fails if no tcp stream is available.
+    pub fn request_rx(&mut self, request: Request) -> ClientResult<Receiver<Result<Response>>> {
+        let ams_header = self.new_tcp_ams_request_header(request);
+        let (tx, rx) = channel::<ClientResult<Response>>();
+        self.get_general_tx()?
+            .send((self.invoke_id, tx))
+            .expect("Failed to send request to thread by mpsc channel");
         let mut buffer = Vec::new();
-        ams_header.write_to(&mut buffer);
-        buffer
+        ams_header.write_to(&mut buffer)?;
+
+        if let Some(s) = &mut self.stream {
+            s.write_all(&buffer)?;
+            return Ok(rx);
+        }
+        Err(anyhow!(AdsError::AdsErrClientPortNotOpen)) //ToDo better error with more detail what went wrong
+    }
+
+    fn new_tcp_ams_request_header(&mut self, request: Request) -> AmsTcpHeader {
+        self.invoke_id += 1;
+        AmsTcpHeader::from(AmsHeader::new(
+            self.ams_targed_address.clone(),
+            self.ams_source_address.clone(),
+            StateFlags::req_default(),
+            self.invoke_id,
+            request,
+        ))
+    }
+
+    fn get_general_tx(&self) -> ClientResult<&TxGeneral> {
+        if let Some(tx) = &self.tx_general {
+            return Ok(tx);
+        }
+        Err(anyhow!(AdsError::AdsErrClientError)) //ToDo create better error
     }
 }

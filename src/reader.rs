@@ -5,7 +5,6 @@ use ads_proto::proto::command_id::CommandID;
 use ads_proto::proto::proto_traits::ReadFrom;
 use ads_proto::proto::response::*;
 use std::collections::HashMap;
-use std::io::Error;
 use std::io::{BufReader, Read};
 use std::net::TcpStream;
 use std::sync::mpsc::{Receiver, Sender};
@@ -14,28 +13,27 @@ use std::thread;
 type SenderTable = HashMap<u32, Sender<ClientResult<Response>>>;
 type SenderTableAdsNotification = HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>;
 
-fn run_reader_thread(
+pub fn run_reader_thread(
     stream: TcpStream,
     rx_general: Receiver<(u32, Sender<ClientResult<Response>>)>,
     rx_device_notification: Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
 ) {
     thread::spawn(move || {
-        let mut buffer: Vec<u8> = Vec::new();
         let mut ams_tcp_header;
         let mut ams_header;
         let mut sender_table_general: SenderTable = HashMap::new();
         let mut sender_table_device_notivication: SenderTableAdsNotification = HashMap::new();
 
         loop {
-            update_sender_table(rx_general, &mut sender_table_general);
+            update_sender_table(&rx_general, &mut sender_table_general);
             update_sender_table_device_notification(
-                rx_device_notification,
+                &rx_device_notification,
                 &mut sender_table_device_notivication,
             );
 
-            match read(stream) {
+            match read(&stream) {
                 Ok(h) => ams_tcp_header = h,
-                Err(e) => continue, // ToDo
+                Err(_) => continue, // ToDo
             }
 
             ams_header = ams_tcp_header.ams_header;
@@ -68,37 +66,27 @@ fn run_reader_thread(
 }
 
 fn update_sender_table(
-    rx: Receiver<(u32, Sender<ClientResult<Response>>)>,
+    rx: &Receiver<(u32, Sender<ClientResult<Response>>)>,
     sender_table: &mut HashMap<u32, Sender<ClientResult<Response>>>,
 ) {
-    match rx.try_recv() {
-        Ok(s) => {
-            sender_table.insert(s.0, s.1);
-        }
-        Err(e) => {
-            //ToDo -> Terminate?...new sender can't be received.
-        }
+    if let Ok(s) = rx.try_recv() {
+        sender_table.insert(s.0, s.1);
     }
 }
 
 fn update_sender_table_device_notification(
-    rx: Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
+    rx: &Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
     sender_table: &mut HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>,
 ) {
-    match rx.try_recv() {
-        Ok(s) => {
-            sender_table.insert(s.0, s.1);
-        }
-        Err(e) => {
-            //ToDo -> Terminate?...new sender can't be received.
-        }
+    if let Ok(s) = rx.try_recv() {
+        sender_table.insert(s.0, s.1);
     }
 }
 
-fn read(tcp_stream: TcpStream) -> ClientResult<AmsTcpHeader> {
+fn read(tcp_stream: &TcpStream) -> ClientResult<AmsTcpHeader> {
     //ToDo update when ads-proto v0.1.1
     let mut buf = vec![0; AMS_HEADER_SIZE];
-    let mut reader = BufReader::new(&tcp_stream);
+    let mut reader = BufReader::new(tcp_stream);
     reader.read_exact(&mut buf)?;
     let ams_tcp_header = AmsTcpHeader::read_from(&mut buf.as_slice())?;
     if ams_tcp_header.ams_header.data_len() > 0 {
@@ -115,9 +103,11 @@ fn forward_ads_notification(
     id: &u32,
     notification: AdsNotificationStream,
 ) -> bool {
-    if sender_table.contains_key(&id) {
-        if let Some(tx) = sender_table.remove(&id) {
-            tx.send(Ok(notification));
+    if sender_table.contains_key(id) {
+        if let Some(tx) = sender_table.remove(id) {
+            tx.send(Ok(notification)).expect(
+                "Failed to send response from reader thread to parent thread by mpsc channel!",
+            );
             return true;
         }
     }
@@ -125,9 +115,11 @@ fn forward_ads_notification(
 }
 
 fn forward_response(sender_table: &mut SenderTable, id: &u32, response: Response) -> bool {
-    if sender_table.contains_key(&id) {
-        if let Some(tx) = sender_table.remove(&id) {
-            tx.send(Ok(response));
+    if sender_table.contains_key(id) {
+        if let Some(tx) = sender_table.remove(id) {
+            tx.send(Ok(response)).expect(
+                "Failed to send response from reader thread to parent thread by mpsc channel!",
+            );
             return true;
         }
     }
