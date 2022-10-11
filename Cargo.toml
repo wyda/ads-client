@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 ads-proto = "0.1.0"
 anyhow = "1.0.57"
+byteorder = "1.4.3"

@@ -3,6 +3,7 @@ use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::command_id::CommandID;
 use ads_proto::proto::proto_traits::ReadFrom;
 use ads_proto::proto::response::*;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::collections::HashMap;
 use std::io::{BufReader, Read};
 use std::net::TcpStream;
@@ -13,15 +14,15 @@ type SenderTable = HashMap<u32, Sender<ClientResult<Response>>>;
 type SenderTableAdsNotification = HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>;
 
 //Tcp Header size without response data
-pub const AMS_HEADER_SIZE: usize = 38;
+pub const AMS_TCP_HEADER_SIZE: usize = 6;
 
 pub fn run_reader_thread(
     stream: TcpStream,
     rx_general: Receiver<(u32, Sender<ClientResult<Response>>)>,
     rx_device_notification: Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
 ) {
+    let mut stream = stream.try_clone().unwrap();
     thread::spawn(move || {
-        let mut ams_tcp_header;
         let mut ams_header;
         let mut sender_table_general: SenderTable = HashMap::new();
         let mut sender_table_device_notivication: SenderTableAdsNotification = HashMap::new();
@@ -33,12 +34,14 @@ pub fn run_reader_thread(
                 &mut sender_table_device_notivication,
             );
 
-            match read(&stream) {
-                Ok(h) => ams_tcp_header = h,
-                Err(_) => continue, // ToDo
+            match read(&mut stream) {
+                Ok(h) => ams_header = h,
+                Err(_) => {
+                    //println!("Error data: {:?}", e);
+                    continue;
+                }
             }
 
-            ams_header = ams_tcp_header.ams_header;
             forward_data(
                 &mut ams_header,
                 &mut sender_table_general,
@@ -66,19 +69,17 @@ fn update_sender_table_device_notification(
     }
 }
 
-fn read(tcp_stream: &TcpStream) -> ClientResult<AmsTcpHeader> {
+fn read(tcp_stream: &mut TcpStream) -> ClientResult<AmsHeader> {
     //ToDo update when ads-proto v0.1.1
-    let mut buf = vec![0; AMS_HEADER_SIZE];
-    let mut reader = BufReader::new(tcp_stream);
-    reader.read_exact(&mut buf)?;
-    let ams_tcp_header = AmsTcpHeader::read_from(&mut buf.as_slice())?;
-    if ams_tcp_header.ams_header.data_len() > 0 {
-        let mut buf2 = vec![0; ams_tcp_header.ams_header.data_len() as usize];
-        reader.read_exact(&mut buf2)?;
-        buf.append(&mut buf2);
-        return Ok(AmsTcpHeader::read_from(&mut buf.as_slice())?);
-    }
-    Ok(ams_tcp_header)
+    let mut buf = vec![0; AMS_TCP_HEADER_SIZE]; //reserved + length
+    tcp_stream.read_exact(&mut buf)?;
+    let mut slice = buf.as_slice();
+    let _ = slice.read_u16::<LittleEndian>();
+    let length = slice.read_u32::<LittleEndian>()?;
+    let mut buf: Vec<u8> = vec![0; length as usize];
+    tcp_stream.read_exact(&mut buf)?;
+    let ams_header = AmsHeader::read_from(&mut buf.as_slice())?;
+    Ok(ams_header)
 }
 
 fn forward_data(

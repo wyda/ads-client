@@ -50,7 +50,7 @@ impl Client {
 
     pub fn connect(&mut self) -> ClientResult<()> {
         if self.stream.is_none() {
-            self.create_stream()?;
+            self.stream = Some(self.create_stream()?);
         }
 
         if let Some(stream) = &self.stream {
@@ -92,15 +92,17 @@ impl Client {
             .send((self.invoke_id, tx))
             .expect("Failed to send request to thread by mpsc channel");
         let mut buffer = Vec::new();
+
         ams_header.write_to(&mut buffer)?;
 
         if let Some(s) = &mut self.stream {
-            s.write_all(&buffer)?;
+            s.write_all(& buffer)?;
             return Ok(rx);
         }
         Err(anyhow!(AdsError::AdsErrClientPortNotOpen)) //ToDo better error with more detail what went wrong
     }
 
+    ///Create new tcp_ams_header with supplied request data.
     fn new_tcp_ams_request_header(&mut self, request: Request) -> AmsTcpHeader {
         self.invoke_id += 1;
         AmsTcpHeader::from(AmsHeader::new(
