@@ -82,11 +82,11 @@ impl Client {
         rx.recv()?
     }
 
-    /// Sends a reqest to the remote device
+    /// Sends a request to the remote device
     /// and returns imediatly a receiver object to read from (mpsc::Receiver).
     /// Fails if no tcp stream is available.
     pub fn request_rx(&mut self, request: Request) -> ClientResult<Receiver<Result<Response>>> {
-        let ams_header = self.new_tcp_ams_request_header(request);
+        let ams_header = self.new_tcp_ams_request_header(request);        
         let (tx, rx) = channel::<ClientResult<Response>>();
         self.get_general_tx()?
             .send((self.invoke_id, tx))
@@ -99,7 +99,7 @@ impl Client {
             s.write_all(& buffer)?;
             return Ok(rx);
         }
-        Err(anyhow!(AdsError::AdsErrClientPortNotOpen)) //ToDo better error with more detail what went wrong
+        Err(anyhow!(AdsError::AdsErrClientPortNotOpen)) //ToDo improve error
     }
 
     ///Create new tcp_ams_header with supplied request data.

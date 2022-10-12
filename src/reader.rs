@@ -9,6 +9,7 @@ use std::io::{BufReader, Read};
 use std::net::TcpStream;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
+use anyhow::{anyhow, Result};
 
 type SenderTable = HashMap<u32, Sender<ClientResult<Response>>>;
 type SenderTableAdsNotification = HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>;
@@ -27,21 +28,23 @@ pub fn run_reader_thread(
         let mut sender_table_general: SenderTable = HashMap::new();
         let mut sender_table_device_notivication: SenderTableAdsNotification = HashMap::new();
 
-        loop {
+        loop {         
+            //read tcp data (blocking)   
+            match read(&mut stream) {
+                Ok(h) => ams_header = h,
+                Err(_) => {                    
+                    continue; //ToDo error handling (?)
+                }
+            }
+
+            //get the latest mpsc sender.
             update_sender_table(&rx_general, &mut sender_table_general);
             update_sender_table_device_notification(
                 &rx_device_notification,
                 &mut sender_table_device_notivication,
             );
-
-            match read(&mut stream) {
-                Ok(h) => ams_header = h,
-                Err(_) => {
-                    //println!("Error data: {:?}", e);
-                    continue;
-                }
-            }
-
+            
+            //Send data to client
             forward_data(
                 &mut ams_header,
                 &mut sender_table_general,
@@ -55,7 +58,7 @@ fn update_sender_table(
     rx: &Receiver<(u32, Sender<ClientResult<Response>>)>,
     sender_table: &mut HashMap<u32, Sender<ClientResult<Response>>>,
 ) {
-    if let Ok(s) = rx.try_recv() {
+    while let Ok(s) = rx.try_recv() {        
         sender_table.insert(s.0, s.1);
     }
 }
@@ -64,14 +67,14 @@ fn update_sender_table_device_notification(
     rx: &Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
     sender_table: &mut HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>,
 ) {
-    if let Ok(s) = rx.try_recv() {
+    while let Ok(s) = rx.try_recv() {
         sender_table.insert(s.0, s.1);
     }
 }
 
 fn read(tcp_stream: &mut TcpStream) -> ClientResult<AmsHeader> {
     //ToDo update when ads-proto v0.1.1
-    let mut buf = vec![0; AMS_TCP_HEADER_SIZE]; //reserved + length
+    let mut buf = vec![0; AMS_TCP_HEADER_SIZE]; //reserved + length        
     tcp_stream.read_exact(&mut buf)?;
     let mut slice = buf.as_slice();
     let _ = slice.read_u16::<LittleEndian>();
@@ -101,7 +104,7 @@ fn forward_data(
                 ads_notification,
             );
         }
-        _ => {
+        _ => {            
             forward_response(
                 sender_table_general,
                 &ams_header.invoke_id(),
@@ -129,8 +132,8 @@ fn forward_ads_notification(
     false
 }
 
-fn forward_response(sender_table: &mut SenderTable, id: &u32, response: Response) -> bool {
-    if sender_table.contains_key(id) {
+fn forward_response(sender_table: &mut SenderTable, id: &u32, response: Response) -> bool {      
+    if sender_table.contains_key(id) {        
         if let Some(tx) = sender_table.remove(id) {
             tx.send(Ok(response)).expect(
                 "Failed to send response from reader thread to parent thread by mpsc channel!",
