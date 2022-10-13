@@ -33,6 +33,7 @@ pub struct Client {
     invoke_id: u32,
     tx_general: Option<TxGeneral>,
     tx_notification: Option<TxNotification>,
+    thread_started: bool,
 }
 
 impl Client {
@@ -45,6 +46,7 @@ impl Client {
             invoke_id: 0,
             tx_general: None,
             tx_notification: None,
+            thread_started: false
         }
     }
 
@@ -58,11 +60,13 @@ impl Client {
                 .update_from_socket_addr(stream.local_addr()?.to_string().as_str())?; //ToDo update when ads-proto 0.1.1
 
             //ToDo check if thread is already started!
-            let (tx, rx) = channel::<(u32, Sender<ClientResult<Response>>)>();
-            let (tx_not, rx_not) = channel::<(u32, Sender<ClientResult<AdsNotificationStream>>)>();
-            self.tx_general = Some(tx);
-            self.tx_notification = Some(tx_not);
-            run_reader_thread(stream.try_clone()?, rx, rx_not);
+            if !self.thread_started {
+                let (tx, rx) = channel::<(u32, Sender<ClientResult<Response>>)>();
+                let (tx_not, rx_not) = channel::<(u32, Sender<ClientResult<AdsNotificationStream>>)>();
+                self.tx_general = Some(tx);
+                self.tx_notification = Some(tx_not);
+                self.thread_started = run_reader_thread(stream.try_clone()?, rx, rx_not)?;
+            }            
         }
         Ok(())
     }

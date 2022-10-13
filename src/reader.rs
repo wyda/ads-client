@@ -1,15 +1,14 @@
 use crate::client::ClientResult;
-use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
+use ads_proto::proto::ams_header::AmsHeader;
 use ads_proto::proto::command_id::CommandID;
 use ads_proto::proto::proto_traits::ReadFrom;
 use ads_proto::proto::response::*;
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashMap;
-use std::io::{BufReader, Read};
+use std::io::Read;
 use std::net::TcpStream;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
-use anyhow::{anyhow, Result};
 
 type SenderTable = HashMap<u32, Sender<ClientResult<Response>>>;
 type SenderTableAdsNotification = HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>;
@@ -21,8 +20,8 @@ pub fn run_reader_thread(
     stream: TcpStream,
     rx_general: Receiver<(u32, Sender<ClientResult<Response>>)>,
     rx_device_notification: Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
-) {
-    let mut stream = stream.try_clone().unwrap();
+) -> ClientResult<bool> {
+    let mut stream = stream.try_clone()?;
     thread::spawn(move || {
         let mut ams_header;
         let mut sender_table_general: SenderTable = HashMap::new();
@@ -52,6 +51,7 @@ pub fn run_reader_thread(
             );
         }
     });
+    Ok(true)
 }
 
 fn update_sender_table(
@@ -75,9 +75,9 @@ fn update_sender_table_device_notification(
 fn read(tcp_stream: &mut TcpStream) -> ClientResult<AmsHeader> {
     //ToDo update when ads-proto v0.1.1
     let mut buf = vec![0; AMS_TCP_HEADER_SIZE]; //reserved + length        
-    tcp_stream.read_exact(&mut buf)?;
+    tcp_stream.read_exact(&mut buf)?;    
     let mut slice = buf.as_slice();
-    let _ = slice.read_u16::<LittleEndian>();
+    let _ = slice.read_u16::<LittleEndian>(); //first 2 bytes are not needed
     let length = slice.read_u32::<LittleEndian>()?;
     let mut buf: Vec<u8> = vec![0; length as usize];
     tcp_stream.read_exact(&mut buf)?;

@@ -1,7 +1,6 @@
 use ads_client::client::Client;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::request::{Request, ReadDeviceInfoRequest, ReadStateRequest, ReadWriteRequest};
-use byteorder::LittleEndian;
 use std::net::Ipv4Addr;
 use ads_proto::ads_services::system_services::GET_SYMHANDLE_BY_NAME;
 
@@ -11,7 +10,7 @@ fn main() {
     let ipv4 = Ipv4Addr::new(192, 168, 0, 150);
     let mut client = Client::new(ams_address, ipv4);
     //Connect client
-    client.connect().expect("Failed to connect!");    
+    client.connect().expect("Failed to connect!");  
 
     //Create requests    
     let mut request_queue = Vec::new();
@@ -49,6 +48,7 @@ fn main() {
     }
     
     let mut counter: u32 = 0;
+    let mut wait_count: u32 = 0;
     while counter < 3 {
         for rx in &rx_queue {
             if let Ok(data) = rx.try_recv() {
@@ -56,9 +56,11 @@ fn main() {
                 counter += 1;
             }
             else{
-                println!("no data received....do something else....")
+                wait_count += 1;
             }
         }
     }    
+
+    println!("\n{:?} loops while waiting for data", wait_count);
 
 }
