@@ -1,8 +1,8 @@
 use ads_client::client::Client;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
-use ads_proto::proto::request::{Request, ReadDeviceInfoRequest, ReadStateRequest, ReadWriteRequest};
+use ads_proto::proto::request::*;
 use std::net::Ipv4Addr;
-use ads_proto::ads_services::system_services::GET_SYMHANDLE_BY_NAME;
+use ads_proto::ads_services::system_services::{GET_SYMHANDLE_BY_NAME, READ_WRITE_SYMVAL_BY_HANDLE};
 
 fn main() {
     //Create client
@@ -18,28 +18,17 @@ fn main() {
     request_queue.push(Request::ReadState(ReadStateRequest::new()));
     let var = "Main.counter";
     request_queue.push(Request::ReadWrite(ReadWriteRequest::new(
-        GET_SYMHANDLE_BY_NAME.index_group, 
-        GET_SYMHANDLE_BY_NAME.index_offset_start, 
-        4, 
-        var.as_bytes().to_vec())));
+        GET_SYMHANDLE_BY_NAME.index_group,
+        GET_SYMHANDLE_BY_NAME.index_offset_start,
+        4,
+        var.as_bytes().to_vec())));    
 
     //read data directly (wait for response)    
-    for request in request_queue {
+    let queue = request_queue.clone();
+    for request in queue {
         let result = client.request(request);
         println!("\n{:?}", result);
-    }   
-
-    //Create requests    
-    let mut request_queue = Vec::new();
-    request_queue.push(Request::ReadDeviceInfo(ReadDeviceInfoRequest::new()));
-    request_queue.push(Request::ReadState(ReadStateRequest::new()));
-    let var = "Main.counter";
-    request_queue.push(Request::ReadWrite(ReadWriteRequest::new(
-        GET_SYMHANDLE_BY_NAME.index_group, 
-        GET_SYMHANDLE_BY_NAME.index_offset_start, 
-        4, 
-        var.as_bytes().to_vec())));
-
+    }
 
     //get mpsc tx channel and poll
     let mut rx_queue = Vec::new();

@@ -57,9 +57,8 @@ impl Client {
 
         if let Some(stream) = &self.stream {
             self.ams_source_address
-                .update_from_socket_addr(stream.local_addr()?.to_string().as_str())?; //ToDo update when ads-proto 0.1.1
-
-            //ToDo check if thread is already started!
+                .update_from_socket_addr(stream.local_addr()?)?;
+           
             if !self.thread_started {
                 let (tx, rx) = channel::<(u32, Sender<ClientResult<Response>>)>();
                 let (tx_not, rx_not) = channel::<(u32, Sender<ClientResult<AdsNotificationStream>>)>();
@@ -74,7 +73,7 @@ impl Client {
     fn create_stream(&self) -> ClientResult<TcpStream> {
         let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;
         stream.set_nodelay(true)?;
-        stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
+        stream.set_write_timeout(Some(Duration::from_millis(1000)))?;        
         Ok(stream)
     }
 
