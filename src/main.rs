@@ -1,6 +1,6 @@
 use ads_client::client::Client;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
-use ads_proto::proto::request::{Request, ReadDeviceInfoRequest};
+use ads_proto::proto::request::{ReadDeviceInfoRequest, Request};
 use std::net::Ipv4Addr;
 
 fn main() {
@@ -9,7 +9,7 @@ fn main() {
     let mut client = Client::new(ams_address, ipv4);
 
     client.connect().expect("Failed to connect!");
-    
+
     let request = Request::ReadDeviceInfo(ReadDeviceInfoRequest::new());
     let result = client.request(request);
     println!("{:?}", result);

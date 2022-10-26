@@ -1,8 +1,8 @@
 use ads_client::client::Client;
+use ads_proto::ads_services::system_services::GET_SYMHANDLE_BY_NAME;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::request::*;
 use std::net::Ipv4Addr;
-use ads_proto::ads_services::system_services::{GET_SYMHANDLE_BY_NAME, READ_WRITE_SYMVAL_BY_HANDLE};
 
 fn main() {
     //Create client
@@ -10,9 +10,9 @@ fn main() {
     let ipv4 = Ipv4Addr::new(192, 168, 0, 150);
     let mut client = Client::new(ams_address, ipv4);
     //Connect client
-    client.connect().expect("Failed to connect!");  
+    client.connect().expect("Failed to connect!");
 
-    //Create requests    
+    //Create requests
     let mut request_queue = Vec::new();
     request_queue.push(Request::ReadDeviceInfo(ReadDeviceInfoRequest::new()));
     request_queue.push(Request::ReadState(ReadStateRequest::new()));
@@ -21,9 +21,10 @@ fn main() {
         GET_SYMHANDLE_BY_NAME.index_group,
         GET_SYMHANDLE_BY_NAME.index_offset_start,
         4,
-        var.as_bytes().to_vec())));    
+        var.as_bytes().to_vec(),
+    )));
 
-    //read data directly (wait for response)    
+    //read data directly (wait for response)
     let queue = request_queue.clone();
     for request in queue {
         let result = client.request(request);
@@ -32,10 +33,10 @@ fn main() {
 
     //get mpsc tx channel and poll
     let mut rx_queue = Vec::new();
-    for request in request_queue {        
-        rx_queue.push(client.request_rx(request).expect("request_rx failed"));        
+    for request in request_queue {
+        rx_queue.push(client.request_rx(request).expect("request_rx failed"));
     }
-    
+
     let mut counter: u32 = 0;
     let mut wait_count: u32 = 0;
     while counter < 3 {
@@ -43,13 +44,11 @@ fn main() {
             if let Ok(data) = rx.try_recv() {
                 println!("\n{:?}", data);
                 counter += 1;
-            }
-            else{
+            } else {
                 wait_count += 1;
             }
         }
-    }    
+    }
 
     println!("\n{:?} loops while waiting for data", wait_count);
-
 }

@@ -46,7 +46,7 @@ impl Client {
             invoke_id: 0,
             tx_general: None,
             tx_notification: None,
-            thread_started: false
+            thread_started: false,
         }
     }
 
@@ -58,14 +58,15 @@ impl Client {
         if let Some(stream) = &self.stream {
             self.ams_source_address
                 .update_from_socket_addr(stream.local_addr()?)?;
-           
+
             if !self.thread_started {
                 let (tx, rx) = channel::<(u32, Sender<ClientResult<Response>>)>();
-                let (tx_not, rx_not) = channel::<(u32, Sender<ClientResult<AdsNotificationStream>>)>();
+                let (tx_not, rx_not) =
+                    channel::<(u32, Sender<ClientResult<AdsNotificationStream>>)>();
                 self.tx_general = Some(tx);
                 self.tx_notification = Some(tx_not);
                 self.thread_started = run_reader_thread(stream.try_clone()?, rx, rx_not)?;
-            }            
+            }
         }
         Ok(())
     }
@@ -73,7 +74,7 @@ impl Client {
     fn create_stream(&self) -> ClientResult<TcpStream> {
         let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;
         stream.set_nodelay(true)?;
-        stream.set_write_timeout(Some(Duration::from_millis(1000)))?;        
+        stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
         Ok(stream)
     }
 
@@ -89,7 +90,7 @@ impl Client {
     /// and returns imediatly a receiver object to read from (mpsc::Receiver).
     /// Fails if no tcp stream is available.
     pub fn request_rx(&mut self, request: Request) -> ClientResult<Receiver<Result<Response>>> {
-        let ams_header = self.new_tcp_ams_request_header(request);        
+        let ams_header = self.new_tcp_ams_request_header(request);
         let (tx, rx) = channel::<ClientResult<Response>>();
         self.get_general_tx()?
             .send((self.invoke_id, tx))
@@ -99,7 +100,7 @@ impl Client {
         ams_header.write_to(&mut buffer)?;
 
         if let Some(s) = &mut self.stream {
-            s.write_all(& buffer)?;
+            s.write_all(&buffer)?;
             return Ok(rx);
         }
         Err(anyhow!(AdsError::AdsErrClientPortNotOpen)) //ToDo improve error
