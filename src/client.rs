@@ -1,4 +1,5 @@
 use crate::reader::run_reader_thread;
+use crate::request_factory::{self, *};
 use ads_proto::error::AdsError;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
@@ -8,6 +9,8 @@ use ads_proto::proto::response::Response;
 use ads_proto::proto::response::*;
 use ads_proto::proto::state_flags::StateFlags;
 use anyhow::{anyhow, Result};
+use byteorder::{LittleEndian, ReadBytesExt};
+use std::collections::HashMap;
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -34,6 +37,7 @@ pub struct Client {
     tx_general: Option<TxGeneral>,
     tx_notification: Option<TxNotification>,
     thread_started: bool,
+    handle_list: HashMap<String, u32>,
 }
 
 impl Client {
@@ -47,6 +51,7 @@ impl Client {
             tx_general: None,
             tx_notification: None,
             thread_started: false,
+            handle_list: HashMap::new(),
         }
     }
 
@@ -104,6 +109,42 @@ impl Client {
             return Ok(rx);
         }
         Err(anyhow!(AdsError::AdsErrClientPortNotOpen)) //ToDo improve error
+    }
+
+    /// Read a var value by it's name.
+    /// Returns ClientResult<ReadResponse>
+    pub fn read_by_name(&mut self, var_name: &str, len: u32) -> ClientResult<ReadResponse> {
+        let handle = self.get_var_handle(var_name)?;
+        let request = Request::Read(request_factory::get_read_request(handle, len));
+        let response = self.request(request)?;
+        let read_response: ReadResponse = response.try_into()?;
+        Ok(read_response)
+    }
+
+    //get a var handle
+    fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
+        if let Some(handle) = self.handle_list.get(var_name) {
+            Ok(*handle)
+        } else {
+            let handle = self.request_var_handle(var_name)?;
+            self.handle_list.insert(var_name.to_string(), handle);
+            Ok(handle)
+        }
+    }
+
+    ///Request new var handle from host
+    fn request_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
+        let request = Request::ReadWrite(get_var_handle_request(var_name));
+        let response: ReadWriteResponse = self.request(request)?.try_into()?;
+        println!("{:?}", response.data);
+
+        if response.length == 4 {
+            return Ok(response.data.as_slice().read_u32::<LittleEndian>()?);
+        }
+        Err(anyhow!(
+            "Failed to get var handle! Variable {} not found!",
+            var_name
+        ))
     }
 
     ///Create new tcp_ams_header with supplied request data.
