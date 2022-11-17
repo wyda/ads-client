@@ -121,6 +121,16 @@ impl Client {
         Ok(read_response)
     }
 
+    /// Write by name
+    /// Returns ClientResult<WriteResponse>
+    pub fn write_by_name(&mut self, var_name: &str, data: Vec<u8>) -> ClientResult<WriteResponse> {
+        let handle = self.get_var_handle(var_name)?;
+        let request = Request::Write(request_factory::get_write_request(handle, data));
+        let response = self.request(request)?;
+        let write_response: WriteResponse = response.try_into()?;
+        Ok(write_response)
+    }
+
     //get a var handle
     fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         if let Some(handle) = self.handle_list.get(var_name) {
@@ -136,7 +146,6 @@ impl Client {
     fn request_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         let request = Request::ReadWrite(get_var_handle_request(var_name));
         let response: ReadWriteResponse = self.request(request)?.try_into()?;
-        println!("{:?}", response.data);
 
         if response.length == 4 {
             return Ok(response.data.as_slice().read_u32::<LittleEndian>()?);
