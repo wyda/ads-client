@@ -1,6 +1,7 @@
 use crate::reader::run_reader_thread;
 use crate::request_factory::{self, *};
 use ads_proto::error::AdsError;
+use ads_proto::proto::ads_state::AdsState;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::proto_traits::*;
@@ -147,6 +148,22 @@ impl Client {
         let response = self.request(request)?;
         let device_state: ReadStateResponse = response.try_into()?;
         Ok(device_state)
+    }
+
+    /// Write control
+    /// Returns ClientResult<>
+    pub fn write_control(
+        &mut self,
+        ads_state: AdsState,
+        device_state: u16,
+    ) -> ClientResult<WriteControlResponse> {
+        let request = Request::WriteControl(request_factory::get_write_control_request(
+            ads_state,
+            device_state,
+        ));
+        let response = self.request(request)?;
+        let write_control_response: WriteControlResponse = response.try_into()?;
+        Ok(write_control_response)
     }
 
     //get a var handle
