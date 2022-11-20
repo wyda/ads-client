@@ -4,7 +4,7 @@ use ads_proto::error::AdsError;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::proto_traits::*;
-use ads_proto::proto::request::Request;
+use ads_proto::proto::request::{ReadDeviceInfoRequest, Request};
 use ads_proto::proto::response::Response;
 use ads_proto::proto::response::*;
 use ads_proto::proto::state_flags::StateFlags;
@@ -129,6 +129,15 @@ impl Client {
         let response = self.request(request)?;
         let write_response: WriteResponse = response.try_into()?;
         Ok(write_response)
+    }
+
+    /// Read device info
+    /// Returns ClientResult<ReadDeviceInfoResponse>
+    pub fn read_device_info(&mut self) -> ClientResult<ReadDeviceInfoResponse> {
+        let request = Request::ReadDeviceInfo(ReadDeviceInfoRequest::new());
+        let response = self.request(request)?;
+        let device_info_response: ReadDeviceInfoResponse = response.try_into()?;
+        Ok(device_info_response)
     }
 
     //get a var handle
