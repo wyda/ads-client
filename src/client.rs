@@ -151,7 +151,7 @@ impl Client {
     }
 
     /// Write control
-    /// Returns ClientResult<>
+    /// Returns ClientResult<WriteControlResponse>
     pub fn write_control(
         &mut self,
         ads_state: AdsState,
@@ -166,7 +166,24 @@ impl Client {
         Ok(write_control_response)
     }
 
-    //get a var handle
+    /// Read and write data
+    /// Returns ClientResult<>
+    pub fn read_write(
+        &mut self,
+        index_offset: u32,
+        read_len: u32,
+        write_data: Vec<u8>,
+    ) -> ClientResult<ReadWriteResponse> {
+        let request = Request::ReadWrite(request_factory::get_read_write_request(
+            index_offset,
+            read_len,
+            write_data,
+        ));
+        let response = self.request(request)?;
+        let read_write_response: ReadWriteResponse = response.try_into()?;
+        Ok(read_write_response)
+    }
+
     fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         if let Some(handle) = self.handle_list.get(var_name) {
             Ok(*handle)
@@ -177,7 +194,7 @@ impl Client {
         }
     }
 
-    ///Request new var handle from host
+    /// Request new var handle from host
     fn request_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         let request = Request::ReadWrite(get_var_handle_request(var_name));
         let response: ReadWriteResponse = self.request(request)?.try_into()?;

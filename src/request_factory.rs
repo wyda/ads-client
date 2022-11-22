@@ -25,3 +25,16 @@ pub fn get_write_control_request(ads_state: AdsState, device_state: u16) -> Writ
     let data: Vec<u8> = Vec::with_capacity(0);
     WriteControlRequest::new(ads_state, device_state, 0, data)
 }
+
+pub fn get_read_write_request(
+    index_offset: u32,
+    read_len: u32,
+    write_data: Vec<u8>,
+) -> ReadWriteRequest {
+    ReadWriteRequest::new(
+        GET_SYMHANDLE_BY_NAME.index_group,
+        index_offset,
+        read_len,
+        write_data,
+    )
+}
