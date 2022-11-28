@@ -2,6 +2,7 @@ use ads_proto::ads_services::system_services::{
     GET_SYMHANDLE_BY_NAME, READ_WRITE_SYMVAL_BY_HANDLE,
 };
 use ads_proto::proto::ads_state::AdsState;
+use ads_proto::proto::ads_transition_mode::AdsTransMode;
 use ads_proto::proto::request::*;
 
 pub fn get_var_handle_request(var_name: &str) -> ReadWriteRequest {
@@ -36,5 +37,22 @@ pub fn get_read_write_request(
         index_offset,
         read_len,
         write_data,
+    )
+}
+
+pub fn get_add_device_notification(
+    handle: u32,
+    length: u32,
+    transmission_mode: AdsTransMode,
+    max_delay: u32,
+    cycle_time: u32,
+) -> AddDeviceNotificationRequest {
+    AddDeviceNotificationRequest::new(
+        READ_WRITE_SYMVAL_BY_HANDLE.index_group,
+        handle,
+        length,
+        transmission_mode,
+        max_delay,
+        cycle_time,
     )
 }

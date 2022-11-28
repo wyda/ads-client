@@ -89,20 +89,24 @@ fn forward_data(
     ams_header: &mut AmsHeader,
     sender_table_general: &mut SenderTable,
     sender_table_device_notivication: &mut SenderTableAdsNotification,
-) {
+) {    
     match ams_header.command_id() {
-        CommandID::DeviceNotification => {
+        CommandID::DeviceNotification => {                               
             let ads_notification: AdsNotificationStream = ams_header
                 .response()
                 .expect("Not possible to extract response from AmsHeader!")
                 .try_into()
                 .expect("try_into AdsNotificationStream failed!");
 
-            forward_ads_notification(
-                sender_table_device_notivication,
-                &ams_header.invoke_id(),
-                ads_notification,
-            );
+            for header in &ads_notification.ads_stamp_headers {
+                for sample in &header.notification_samples {
+                    forward_ads_notification(
+                        sender_table_device_notivication,
+                        &sample.notification_handle,
+                        ads_notification.clone(),
+                    );         
+                }
+            }                                  
         }
         _ => {
             forward_response(
@@ -120,9 +124,9 @@ fn forward_ads_notification(
     sender_table: &mut SenderTableAdsNotification,
     id: &u32,
     notification: AdsNotificationStream,
-) -> bool {
-    if sender_table.contains_key(id) {
-        if let Some(tx) = sender_table.remove(id) {
+) -> bool {    
+    if sender_table.contains_key(id) {                        
+        if let Some(tx) = sender_table.get(id) {            
             tx.send(Ok(notification)).expect(
                 "Failed to send response from reader thread to parent thread by mpsc channel!",
             );

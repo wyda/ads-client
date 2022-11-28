@@ -2,6 +2,7 @@ use crate::reader::run_reader_thread;
 use crate::request_factory::{self, *};
 use ads_proto::error::AdsError;
 use ads_proto::proto::ads_state::AdsState;
+use ads_proto::proto::ads_transition_mode::AdsTransMode;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::proto_traits::*;
@@ -9,6 +10,7 @@ use ads_proto::proto::request::{ReadDeviceInfoRequest, ReadStateRequest, Request
 use ads_proto::proto::response::Response;
 use ads_proto::proto::response::*;
 use ads_proto::proto::state_flags::StateFlags;
+use anyhow::Error;
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashMap;
@@ -39,6 +41,7 @@ pub struct Client {
     tx_notification: Option<TxNotification>,
     thread_started: bool,
     handle_list: HashMap<String, u32>,
+    notification_handle_list: HashMap<String, u32>,
 }
 
 impl Client {
@@ -53,6 +56,7 @@ impl Client {
             tx_notification: None,
             thread_started: false,
             handle_list: HashMap::new(),
+            notification_handle_list: HashMap::new(),
         }
     }
 
@@ -184,6 +188,40 @@ impl Client {
         Ok(read_write_response)
     }
 
+    /// Add device notification to receive updated values at value change or at a certain time interfall
+    /// Returns ClientResult<???>
+    pub fn add_device_notification(
+        &mut self,
+        var_name: &str,
+        length: u32,
+        transmission_mode: AdsTransMode,
+        max_delay: u32,
+        cycle_time: u32,
+    ) -> ClientResult<Receiver<Result<AdsNotificationStream, Error>>> {
+        let handle = self.get_var_handle(var_name)?;
+        let request = Request::AddDeviceNotification(request_factory::get_add_device_notification(
+            handle,
+            length,
+            transmission_mode,
+            max_delay,
+            cycle_time,
+        ));
+
+        //Get notification handle
+        let response: AddDeviceNotificationResponse = self.request(request)?.try_into()?;
+        let handle = response.notification_handle;
+        //Create mpsc channel for notifications
+        let (tx, rx) = channel::<ClientResult<AdsNotificationStream>>();
+        //Send tx to reader thread
+        self.get_notification_tx()?
+            .send((handle, tx))
+            .expect("Failed to send request to thread by mpsc channel");
+
+        self.notification_handle_list
+            .insert(var_name.to_string(), handle);
+        Ok(rx)
+    }
+
     fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         if let Some(handle) = self.handle_list.get(var_name) {
             Ok(*handle)
@@ -222,6 +260,13 @@ impl Client {
 
     fn get_general_tx(&self) -> ClientResult<&TxGeneral> {
         if let Some(tx) = &self.tx_general {
+            return Ok(tx);
+        }
+        Err(anyhow!(AdsError::AdsErrClientError)) //ToDo create better error
+    }
+
+    fn get_notification_tx(&self) -> ClientResult<&TxNotification> {
+        if let Some(tx) = &self.tx_notification {
             return Ok(tx);
         }
         Err(anyhow!(AdsError::AdsErrClientError)) //ToDo create better error
