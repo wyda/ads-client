@@ -56,3 +56,7 @@ pub fn get_add_device_notification(
         cycle_time,
     )
 }
+
+pub fn get_delete_device_notification(handle: u32) -> DeleteDeviceNotificationRequest {
+    DeleteDeviceNotificationRequest::new(handle)
+}

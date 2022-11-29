@@ -222,6 +222,23 @@ impl Client {
         Ok(rx)
     }
 
+    pub fn delete_device_notification(
+        &mut self,
+        var_name: &str,
+    ) -> ClientResult<DeleteDeviceNotificationResponse> {
+        let handle;
+        if let Some(h) = self.notification_handle_list.get(var_name) {
+            handle = *h;
+            let request = Request::DeleteDeviceNotification(
+                request_factory::get_delete_device_notification(handle),
+            );
+            let response = self.request(request)?;
+            let response: DeleteDeviceNotificationResponse = response.try_into()?;
+            return Ok(response);
+        }
+        Err(anyhow!(AdsError::AdsErrDeviceSymbolNotFound)) //??
+    }
+
     fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         if let Some(handle) = self.handle_list.get(var_name) {
             Ok(*handle)

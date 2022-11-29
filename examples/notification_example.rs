@@ -3,7 +3,6 @@ use ads_proto::proto::{
     ads_transition_mode::AdsTransMode,
     ams_address::{AmsAddress, AmsNetId},
 };
-use byteorder::{LittleEndian, ReadBytesExt};
 use std::net::Ipv4Addr;
 
 fn main() {
@@ -22,8 +21,11 @@ fn main() {
         .add_device_notification(var, len, AdsTransMode::OnChange, 1, 1)
         .unwrap();
 
-    loop {        
+    for _ in 1..10 {
         let result = rx.recv().unwrap().unwrap();
         println!("{:?}", result.ads_stamp_headers);
     }
+
+    let response = client.delete_device_notification(var);
+    println!("{:?}", response);
 }
