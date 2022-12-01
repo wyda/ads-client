@@ -1,5 +1,5 @@
 use ads_proto::ads_services::system_services::{
-    GET_SYMHANDLE_BY_NAME, READ_WRITE_SYMVAL_BY_HANDLE,
+    GET_SYMHANDLE_BY_NAME, READ_WRITE_SYMVAL_BY_HANDLE, RELEASE_SYMHANDLE,
 };
 use ads_proto::proto::ads_state::AdsState;
 use ads_proto::proto::ads_transition_mode::AdsTransMode;
@@ -11,6 +11,14 @@ pub fn get_var_handle_request(var_name: &str) -> ReadWriteRequest {
         GET_SYMHANDLE_BY_NAME.index_offset_start,
         4,
         var_name.as_bytes().to_vec(),
+    )
+}
+
+pub fn get_release_handle_request(handle: u32) -> WriteRequest {
+    WriteRequest::new(
+        RELEASE_SYMHANDLE.index_group,
+        RELEASE_SYMHANDLE.index_offset_start,
+        handle.to_le_bytes().to_vec(),
     )
 }
 

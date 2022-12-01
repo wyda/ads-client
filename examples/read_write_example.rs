@@ -18,4 +18,8 @@ fn main() {
         .unwrap();
     let handle = handle.data.as_slice().read_u16::<LittleEndian>().unwrap();
     println!("The var hadle for {:?} is {:?}", var_name, handle);
+
+    //Release handle if not needed anymore
+    let result = client.release_handle(var_name);
+    println!("{:?}", result);
 }

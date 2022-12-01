@@ -21,5 +21,9 @@ fn main() {
     println!(
         "\n{:?}",
         result.unwrap().data.as_slice().read_u16::<LittleEndian>()
-    )
+    );
+
+    //Release handle if not needed anymore
+    let result = client.release_handle(var);
+    println!("{:?}", result);
 }

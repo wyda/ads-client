@@ -126,6 +126,12 @@ impl Client {
         Ok(read_response)
     }
 
+    /// Read a var value by it's name.
+    /// Returns ClientResult<ReadResponse>
+    //pub fn sumup_read_by_name(&mut self, var_name: &str, len: u32) -> ClientResult<ReadResponse> {
+
+    //}
+
     /// Write by name
     /// Returns ClientResult<WriteResponse>
     pub fn write_by_name(&mut self, var_name: &str, data: Vec<u8>) -> ClientResult<WriteResponse> {
@@ -241,10 +247,12 @@ impl Client {
 
     fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         if let Some(handle) = self.handle_list.get(var_name) {
+            println!("{:?}", handle);
             Ok(*handle)
         } else {
             let handle = self.request_var_handle(var_name)?;
             self.handle_list.insert(var_name.to_string(), handle);
+            println!("{:?}", handle);
             Ok(handle)
         }
     }
@@ -261,6 +269,17 @@ impl Client {
             "Failed to get var handle! Variable {} not found!",
             var_name
         ))
+    }
+
+    /// Release var handle
+    pub fn release_handle(&mut self, var_name: &str) -> ClientResult<WriteResponse> {
+        if let Some(handle) = self.handle_list.get(var_name) {
+            let request = Request::Write(request_factory::get_release_handle_request(*handle));
+            let response = self.request(request)?;
+            let response: WriteResponse = response.try_into()?;
+            return Ok(response);
+        }
+        Err(anyhow!("Handle not available"))
     }
 
     ///Create new tcp_ams_header with supplied request data.

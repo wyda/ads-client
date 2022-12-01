@@ -33,4 +33,8 @@ fn main() {
         .expect("Failed to write value!");
     println!("Write result -> {:?}", write_result.result);
     println!("Command ID -> {:?}", write_result.command_id);
+
+    //Release handle if not needed anymore
+    let result = client.release_handle(var);
+    println!("{:?}", result);
 }
