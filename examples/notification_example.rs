@@ -21,11 +21,19 @@ fn main() {
         .add_device_notification(var, len, AdsTransMode::OnChange, 1, 1)
         .unwrap();
 
+    println!("Receive data...\n");
+    let mut list = Vec::new();
     for _ in 1..10 {
         let result = rx.recv().unwrap().unwrap();
-        println!("{:?}", result.ads_stamp_headers);
+        list.push(result.ads_stamp_headers);
     }
 
+    println!("Print revceived data:\n");
+    for r in list {
+        println!("{:?}", r);
+    }
+
+    println!("\nNow delete the notification");
     let response = client.delete_device_notification(var);
     println!("{:?}", response);
 }

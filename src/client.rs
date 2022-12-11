@@ -240,6 +240,7 @@ impl Client {
             );
             let response = self.request(request)?;
             let response: DeleteDeviceNotificationResponse = response.try_into()?;
+            self.notification_handle_list.remove(var_name);
             return Ok(response);
         }
         Err(anyhow!(AdsError::AdsErrDeviceSymbolNotFound)) //??
@@ -247,12 +248,10 @@ impl Client {
 
     fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         if let Some(handle) = self.handle_list.get(var_name) {
-            println!("{:?}", handle);
             Ok(*handle)
         } else {
             let handle = self.request_var_handle(var_name)?;
             self.handle_list.insert(var_name.to_string(), handle);
-            println!("{:?}", handle);
             Ok(handle)
         }
     }
@@ -277,6 +276,7 @@ impl Client {
             let request = Request::Write(request_factory::get_release_handle_request(*handle));
             let response = self.request(request)?;
             let response: WriteResponse = response.try_into()?;
+            self.handle_list.remove(var_name);
             return Ok(response);
         }
         Err(anyhow!("Handle not available"))
