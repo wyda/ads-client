@@ -23,7 +23,7 @@ fn main() {
 
     println!("Receive data...\n");
     let mut list = Vec::new();
-    for _ in 1..10 {
+    for _ in 1..10000 {
         let result = rx.recv().unwrap().unwrap();
         list.push(result.ads_stamp_headers);
     }

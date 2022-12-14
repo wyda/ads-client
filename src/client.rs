@@ -15,7 +15,7 @@ use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashMap;
 use std::io::Write;
-use std::net::{Ipv4Addr, SocketAddr, TcpStream, Shutdown};
+use std::net::{Ipv4Addr, Shutdown, SocketAddr, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
@@ -91,7 +91,7 @@ impl Client {
 
     fn create_stream(&self) -> ClientResult<TcpStream> {
         let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;
-        stream.set_nonblocking(true)?;
+        //stream.set_nonblocking(true)?;
         stream.set_nodelay(true)?;
         stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
         stream.set_read_timeout(Some(Duration::from_millis(1000)))?;
@@ -123,7 +123,7 @@ impl Client {
             s.write_all(&buffer)?;
             return Ok(rx);
         }
-        Err(anyhow!(AdsError::AdsErrClientPortNotOpen)) //ToDo improve error
+        Err(anyhow!(AdsError::AdsErrClientPortNotOpen))
     }
 
     /// Read a var value by it's name.

@@ -42,7 +42,10 @@ pub fn run_reader_thread(
                                 &rx_device_notification,
                                 &mut sender_table_device_notivication,
                             );
-                            notify_connection_down(&mut sender_table_general);
+                            notify_connection_down(
+                                &mut sender_table_general,
+                                &mut sender_table_device_notivication,
+                            );
                             continue;
                         }
                         _ => {
@@ -164,9 +167,35 @@ fn forward_response(sender_table: &mut SenderTable, id: &u32, response: Response
     false
 }
 
-fn notify_connection_down(sender_table: &mut SenderTable) {
-    for tx in sender_table.values_mut() {
-        tx.send(Err(anyhow!(AdsError::ErrPortNotConnected)))
-            .expect("mpsc channel not valid in 'notify_connection_down'");
+fn notify_connection_down(
+    sender_table: &mut SenderTable,
+    sender_table_device_notivication: &mut SenderTableAdsNotification,
+) {
+    let mut delete_list = Vec::new();
+    for (id, tx) in sender_table.clone() {
+        if tx
+            .send(Err(anyhow!(AdsError::ErrPortNotConnected)))
+            .is_err()
+        {
+            delete_list.push(id);
+        }
+    }
+
+    for id in &delete_list {
+        sender_table.remove(id);
+    }
+
+    let mut delete_notification_list = Vec::new();
+    for (id, tx) in sender_table_device_notivication.clone() {
+        if tx
+            .send(Err(anyhow!(AdsError::ErrPortNotConnected)))
+            .is_err()
+        {
+            delete_notification_list.push(id);
+        }
+    }
+
+    for id in &delete_notification_list {
+        sender_table_device_notivication.remove(id);
     }
 }
