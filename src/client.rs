@@ -15,7 +15,7 @@ use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashMap;
 use std::io::Write;
-use std::net::{Ipv4Addr, SocketAddr, TcpStream};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream, Shutdown};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
@@ -42,6 +42,14 @@ pub struct Client {
     thread_started: bool,
     handle_list: HashMap<String, u32>,
     notification_handle_list: HashMap<String, u32>,
+}
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        if let Some(s) = &self.stream {
+            let _ = s.shutdown(Shutdown::Both);
+        }
+    }
 }
 
 impl Client {
