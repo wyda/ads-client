@@ -16,12 +16,19 @@ fn main() {
     let len = 2;
 
     //read data by name
-    let result = client.read_by_name(var, len);
-    println!("\n{:?}", result);
-    println!(
-        "\n{:?}",
-        result.unwrap().data.as_slice().read_u16::<LittleEndian>()
-    );
+    let iterations = 1000;
+    println!("Read var {:?} {:?} times", var, iterations);
+    for _ in 0..iterations {
+        match client.read_by_name(var, len) {
+            Ok(r) => {
+                println!("{:?}", r);
+            }
+            Err(e) => {
+                println!("!{:?}", e);
+                break;
+            }
+        }
+    }
 
     //Release handle if not needed anymore
     let result = client.release_handle(var);

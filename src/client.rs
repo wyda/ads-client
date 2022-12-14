@@ -83,8 +83,10 @@ impl Client {
 
     fn create_stream(&self) -> ClientResult<TcpStream> {
         let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;
+        stream.set_nonblocking(true)?;
         stream.set_nodelay(true)?;
         stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
+        stream.set_read_timeout(Some(Duration::from_millis(1000)))?;
         Ok(stream)
     }
 

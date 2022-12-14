@@ -16,6 +16,7 @@ fn main() {
     let handle = client
         .read_write(0, 4, var_name.as_bytes().to_vec())
         .unwrap();
+
     let handle = handle.data.as_slice().read_u16::<LittleEndian>().unwrap();
     println!("The var hadle for {:?} is {:?}", var_name, handle);
 

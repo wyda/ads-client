@@ -1,11 +1,13 @@
 use crate::client::ClientResult;
+use ads_proto::error::AdsError;
 use ads_proto::proto::ams_header::AmsHeader;
 use ads_proto::proto::command_id::CommandID;
 use ads_proto::proto::proto_traits::ReadFrom;
 use ads_proto::proto::response::*;
+use anyhow::anyhow;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::net::TcpStream;
 use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
@@ -31,8 +33,22 @@ pub fn run_reader_thread(
             //read tcp data (blocking)
             match read(&mut stream) {
                 Ok(h) => ams_header = h,
-                Err(_) => {
-                    continue; //ToDo error handling (?)
+                Err(e) => {
+                    match e.kind() {
+                        ErrorKind::UnexpectedEof => {
+                            //get the latest mpsc sender.
+                            update_sender_table(&rx_general, &mut sender_table_general);
+                            update_sender_table_device_notification(
+                                &rx_device_notification,
+                                &mut sender_table_device_notivication,
+                            );
+                            notify_connection_down(&mut sender_table_general);
+                            continue;
+                        }
+                        _ => {
+                            continue;
+                        }
+                    }
                 }
             }
 
@@ -72,7 +88,7 @@ fn update_sender_table_device_notification(
     }
 }
 
-fn read(tcp_stream: &mut TcpStream) -> ClientResult<AmsHeader> {
+fn read(tcp_stream: &mut TcpStream) -> Result<AmsHeader, std::io::Error> {
     //ToDo update when ads-proto v0.1.1
     let mut buf = vec![0; AMS_TCP_HEADER_SIZE]; //reserved + length
     tcp_stream.read_exact(&mut buf)?;
@@ -146,4 +162,11 @@ fn forward_response(sender_table: &mut SenderTable, id: &u32, response: Response
         }
     }
     false
+}
+
+fn notify_connection_down(sender_table: &mut SenderTable) {
+    for tx in sender_table.values_mut() {
+        tx.send(Err(anyhow!(AdsError::ErrPortNotConnected)))
+            .expect("mpsc channel not valid in 'notify_connection_down'");
+    }
 }
