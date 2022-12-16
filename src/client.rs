@@ -90,8 +90,7 @@ impl Client {
     }
 
     fn create_stream(&self) -> ClientResult<TcpStream> {
-        let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;
-        //stream.set_nonblocking(true)?;
+        let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;        
         stream.set_nodelay(true)?;
         stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
         stream.set_read_timeout(Some(Duration::from_millis(1000)))?;
@@ -103,7 +102,9 @@ impl Client {
     /// Fails if no tcp stream is available.
     pub fn request(&mut self, request: Request) -> ClientResult<Response> {
         let rx = self.request_rx(request)?;
-        rx.recv()?
+        let response = rx.recv()?;
+        self.check_tcp_stream(&response);
+        response
     }
 
     /// Sends a request to the remote device
@@ -302,6 +303,20 @@ impl Client {
             self.invoke_id,
             request,
         ))
+    }
+
+    ///Check if stream disconnected
+    fn check_tcp_stream(&mut self, response: &ClientResult<Response>) {
+        if let Err(e) = response {
+            if e.is::<AdsError>() {   
+                let e = e.downcast_ref::<AdsError>();
+                if let Some(e) = e {
+                    if e == &AdsError::ErrPortNotConnected {
+                        self.stream = None;
+                    }
+                }                                
+            }
+        }
     }
 
     fn get_general_tx(&self) -> ClientResult<&TxGeneral> {
