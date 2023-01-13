@@ -29,6 +29,9 @@ fn main() {
                         if client.connect().is_ok() {
                             println!("Reconnected...");
                         }  
+                        else {
+                            println!("Reconnecting failed...");
+                        }
                     }                    
                 }
                 println!("!{:?}", e);                
@@ -38,5 +41,5 @@ fn main() {
 
     //Release handle if not needed anymore
     let result = client.release_handle(var);
-    println!("{:?}", result);
+    println!("{:?}", result.unwrap());
 }

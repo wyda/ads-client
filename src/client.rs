@@ -68,7 +68,9 @@ impl Client {
         }
     }
 
-    pub fn connect(&mut self) -> ClientResult<()> {
+    /// Connect to host.
+    /// Fails if host is not reachable or if the reader thread can't be started.
+    pub fn connect(&mut self) -> ClientResult<ReadStateResponse> {
         if self.stream.is_none() {
             self.stream = Some(self.create_stream()?);
         }
@@ -86,11 +88,13 @@ impl Client {
                 self.thread_started = run_reader_thread(stream.try_clone()?, rx, rx_not)?;
             }
         }
-        Ok(())
+        //Check if host is responding
+        self.read_state()        
     }
 
+    /// Creates and configures the TCP stream
     fn create_stream(&self) -> ClientResult<TcpStream> {
-        let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;        
+        let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;    
         stream.set_nodelay(true)?;
         stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
         stream.set_read_timeout(Some(Duration::from_millis(1000)))?;
