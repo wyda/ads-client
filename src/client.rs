@@ -29,6 +29,7 @@ pub const ADS_SECURE_TCP_SERVER_PORT: u16 = 8016;
 pub type ClientResult<T> = Result<T, anyhow::Error>;
 type TxGeneral = Sender<(u32, Sender<ClientResult<Response>>)>;
 type TxNotification = Sender<(u32, Sender<ClientResult<AdsNotificationStream>>)>;
+type TxStreamUpdate = Sender<TcpStream>;
 
 #[derive(Debug)]
 pub struct Client {
@@ -39,6 +40,7 @@ pub struct Client {
     invoke_id: u32,
     tx_general: Option<TxGeneral>,
     tx_notification: Option<TxNotification>,
+    tx_stream_update: Option<TxStreamUpdate>,
     thread_started: bool,
     handle_list: HashMap<String, u32>,
     notification_handle_list: HashMap<String, u32>,
@@ -62,6 +64,7 @@ impl Client {
             invoke_id: 0,
             tx_general: None,
             tx_notification: None,
+            tx_stream_update: None,
             thread_started: false,
             handle_list: HashMap::new(),
             notification_handle_list: HashMap::new(),
@@ -83,18 +86,28 @@ impl Client {
                 let (tx, rx) = channel::<(u32, Sender<ClientResult<Response>>)>();
                 let (tx_not, rx_not) =
                     channel::<(u32, Sender<ClientResult<AdsNotificationStream>>)>();
+                let (tx_tcp, rx_tcp) = channel::<TcpStream>();
                 self.tx_general = Some(tx);
                 self.tx_notification = Some(tx_not);
-                self.thread_started = run_reader_thread(stream.try_clone()?, rx, rx_not)?;
+                self.tx_stream_update = Some(tx_tcp);
+                self.thread_started = run_reader_thread(stream.try_clone()?, rx, rx_not, rx_tcp)?;
+            } else {
+                if let Some(tx) = &self.tx_stream_update {                    
+                    tx.send(stream.try_clone()?)?;
+                }
             }
+            //Check if host is responding            
+            let state = self.read_state();            
+            println!("read state returned"); //ToDo delete
+            return state
+        } else {
+            return Err(anyhow!(AdsError::ErrPortNotConnected));
         }
-        //Check if host is responding
-        self.read_state()        
     }
 
     /// Creates and configures the TCP stream
     fn create_stream(&self) -> ClientResult<TcpStream> {
-        let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;    
+        let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;
         stream.set_nodelay(true)?;
         stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
         stream.set_read_timeout(Some(Duration::from_millis(1000)))?;
@@ -312,13 +325,16 @@ impl Client {
     ///Check if stream disconnected
     fn check_tcp_stream(&mut self, response: &ClientResult<Response>) {
         if let Err(e) = response {
-            if e.is::<AdsError>() {   
+            if e.is::<AdsError>() {
                 let e = e.downcast_ref::<AdsError>();
                 if let Some(e) = e {
                     if e == &AdsError::ErrPortNotConnected {
+                        if let Some(stream) = &self.stream {
+                            let _ = stream.shutdown(Shutdown::Both);
+                        }
                         self.stream = None;
                     }
-                }                                
+                }
             }
         }
     }

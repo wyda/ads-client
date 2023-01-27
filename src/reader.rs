@@ -22,6 +22,7 @@ pub fn run_reader_thread(
     stream: TcpStream,
     rx_general: Receiver<(u32, Sender<ClientResult<Response>>)>,
     rx_device_notification: Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
+    rx_update_tcp_stream: Receiver<TcpStream>,
 ) -> ClientResult<bool> {
     let mut stream = stream.try_clone()?;
     thread::spawn(move || {
@@ -46,15 +47,20 @@ pub fn run_reader_thread(
                                 &mut sender_table_general,
                                 &mut sender_table_device_notivication,
                             );
+                            //Update TCP Stream
+                            stream = update_tcp_stream(&rx_update_tcp_stream, stream);
                             continue;
                         }
                         _ => {
+                            //Update TCP Stream
+                            stream = update_tcp_stream(&rx_update_tcp_stream, stream);
                             continue;
                         }
                     }
                 }
             }
-
+            //Update TCP Stream
+            stream = update_tcp_stream(&rx_update_tcp_stream, stream);
             //get the latest mpsc sender.
             update_sender_table(&rx_general, &mut sender_table_general);
             update_sender_table_device_notification(
@@ -63,14 +69,32 @@ pub fn run_reader_thread(
             );
 
             //Send data to client
-            forward_data(
-                &mut ams_header,
-                &mut sender_table_general,
-                &mut sender_table_device_notivication,
-            );
+            match ams_header.ads_error() {
+                AdsError::ErrNoError => {
+                    forward_data(
+                        &mut ams_header,
+                        &mut sender_table_general,
+                        &mut sender_table_device_notivication,
+                    );
+                }
+                AdsError::ErrPortNotConnected => notify_connection_down(
+                    &mut sender_table_general,
+                    &mut sender_table_device_notivication,
+                ),
+                _ => continue,
+            };
+            println!("{:?}", ams_header.ads_error());
         }
     });
     Ok(true)
+}
+
+fn update_tcp_stream(rx_tcp_stream: &Receiver<TcpStream>, stream: TcpStream) -> TcpStream {
+    if let Ok(s) = rx_tcp_stream.try_recv() {        
+        return s;
+    } else {
+        return stream;
+    }
 }
 
 fn update_sender_table(

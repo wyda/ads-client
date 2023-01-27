@@ -1,5 +1,8 @@
 use ads_client::client::Client;
-use ads_proto::{proto::ams_address::{AmsAddress, AmsNetId}, error::AdsError};
+use ads_proto::{
+    error::AdsError,
+    proto::ams_address::{AmsAddress, AmsNetId},
+};
 use std::net::Ipv4Addr;
 
 fn main() {
@@ -25,16 +28,15 @@ fn main() {
             Err(e) => {
                 if e.is::<AdsError>() {
                     if let Some(e) = e.downcast_ref::<AdsError>() {
-                        println!("!{:?}", e);
+                        println!("!!?!?{:?}", e);
                         if client.connect().is_ok() {
                             println!("Reconnected...");
-                        }  
-                        else {
+                        } else {
                             println!("Reconnecting failed...");
                         }
-                    }                    
+                    }
                 }
-                println!("!{:?}", e);                
+                println!("!?{:?}", e);
             }
         }
     }
