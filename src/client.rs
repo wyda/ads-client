@@ -91,17 +91,13 @@ impl Client {
                 self.tx_notification = Some(tx_not);
                 self.tx_stream_update = Some(tx_tcp);
                 self.thread_started = run_reader_thread(stream.try_clone()?, rx, rx_not, rx_tcp)?;
-            } else {
-                if let Some(tx) = &self.tx_stream_update {                    
-                    tx.send(stream.try_clone()?)?;
-                }
+            } else if let Some(tx) = &self.tx_stream_update {
+                tx.send(stream.try_clone()?)?;
             }
-            //Check if host is responding            
-            let state = self.read_state();            
-            println!("read state returned"); //ToDo delete
-            return state
+            //Check if host is responding
+            self.read_state()
         } else {
-            return Err(anyhow!(AdsError::ErrPortNotConnected));
+            Err(anyhow!(AdsError::ErrPortNotConnected))
         }
     }
 
@@ -332,6 +328,8 @@ impl Client {
                         if let Some(stream) = &self.stream {
                             let _ = stream.shutdown(Shutdown::Both);
                         }
+                        self.handle_list.clear();
+                        self.notification_handle_list.clear();
                         self.stream = None;
                     }
                 }

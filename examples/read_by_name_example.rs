@@ -18,7 +18,7 @@ fn main() {
     let len = 2;
 
     //read data by name
-    let iterations = 1000;
+    let iterations = 1000000;
     println!("Read var {:?} {:?} times", var, iterations);
     for _ in 0..iterations {
         match client.read_by_name(var, len) {
@@ -28,7 +28,7 @@ fn main() {
             Err(e) => {
                 if e.is::<AdsError>() {
                     if let Some(e) = e.downcast_ref::<AdsError>() {
-                        println!("!!?!?{:?}", e);
+                        println!("Ads Error{:?}", e);
                         if client.connect().is_ok() {
                             println!("Reconnected...");
                         } else {
@@ -36,7 +36,7 @@ fn main() {
                         }
                     }
                 }
-                println!("!?{:?}", e);
+                println!("Other Error{:?}", e);
             }
         }
     }

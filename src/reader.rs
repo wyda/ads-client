@@ -52,6 +52,16 @@ pub fn run_reader_thread(
                             continue;
                         }
                         _ => {
+                            //get the latest mpsc sender.
+                            update_sender_table(&rx_general, &mut sender_table_general);
+                            update_sender_table_device_notification(
+                                &rx_device_notification,
+                                &mut sender_table_device_notivication,
+                            );
+                            notify_connection_down(
+                                &mut sender_table_general,
+                                &mut sender_table_device_notivication,
+                            );
                             //Update TCP Stream
                             stream = update_tcp_stream(&rx_update_tcp_stream, stream);
                             continue;
@@ -83,17 +93,16 @@ pub fn run_reader_thread(
                 ),
                 _ => continue,
             };
-            println!("{:?}", ams_header.ads_error());
         }
     });
     Ok(true)
 }
 
 fn update_tcp_stream(rx_tcp_stream: &Receiver<TcpStream>, stream: TcpStream) -> TcpStream {
-    if let Ok(s) = rx_tcp_stream.try_recv() {        
-        return s;
+    if let Ok(new_stream) = rx_tcp_stream.try_recv() {
+        new_stream
     } else {
-        return stream;
+        stream
     }
 }
 
