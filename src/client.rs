@@ -6,10 +6,12 @@ use ads_proto::proto::ads_transition_mode::AdsTransMode;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::proto_traits::*;
-use ads_proto::proto::request::{ReadDeviceInfoRequest, ReadStateRequest, Request};
+use ads_proto::proto::request::{ReadDeviceInfoRequest, ReadRequest, ReadStateRequest, Request};
 use ads_proto::proto::response::Response;
 use ads_proto::proto::response::*;
 use ads_proto::proto::state_flags::StateFlags;
+use ads_proto::proto::sumup::sumup_request::SumupReadRequest;
+use ads_proto::proto::sumup::sumup_response::SumupReadResponse;
 use anyhow::Error;
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -19,7 +21,7 @@ use std::net::{Ipv4Addr, Shutdown, SocketAddr, TcpStream};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
-/// UDP ADS-Protocol port dicovery
+/// UDP ADS-Protocol port discovery
 pub const ADS_UDP_SERVER_PORT: u16 = 48899;
 /// TCP ADS-Protocol port not secured
 pub const ADS_TCP_SERVER_PORT: u16 = 48898;
@@ -141,7 +143,7 @@ impl Client {
     }
 
     /// Read a var value by it's name.
-    /// Returns ClientResult<ReadResponse>
+    /// Returns ReadResponse
     pub fn read_by_name(&mut self, var_name: &str, len: u32) -> ClientResult<ReadResponse> {
         let handle = self.get_var_handle(var_name)?;
         let request = Request::Read(request_factory::get_read_request(handle, len));
@@ -150,14 +152,41 @@ impl Client {
         Ok(read_response)
     }
 
-    /// Read a var value by it's name.
-    /// Returns ClientResult<ReadResponse>
-    //pub fn sumup_read_by_name(&mut self, var_name: &str, len: u32) -> ClientResult<ReadResponse> {
+    /// Read a list of var value by names.
+    /// Returns ReadWriteResponse
+    pub fn sumup_read_by_name(
+        &mut self,
+        var_names: &HashMap<String, u32>,
+    ) -> ClientResult<HashMap<String, Vec<u8>>> {
+        let mut requests: Vec<ReadRequest> = Vec::new();
+        for (varname, length) in var_names {
+            let handle = self.get_var_handle(varname.as_str())?;
+            requests.push(get_read_request(handle, *length));
+        }
 
-    //}
+        let sumup_request = SumupReadRequest::new(requests);
+        let mut buf = Vec::new();
+        sumup_request.write_to(&mut buf)?;
+        let request = Request::ReadWrite(get_sumup_read_write_request(
+            sumup_request.request_count(),
+            sumup_request.expected_response_len(),
+            buf,
+        ));
+        let response = self.request(request)?;
+        let read_response: ReadWriteResponse = response.try_into()?;
+        let sumup_read_response = SumupReadResponse::read_from(&mut read_response.data.as_slice())?;
+        let mut result: HashMap<String, Vec<u8>> = HashMap::new();
+        for (n, (name, _)) in var_names.iter().enumerate() {
+            result.insert(
+                name.clone(),
+                sumup_read_response.read_responses[n].data.clone(),
+            );
+        }
+        Ok(result)
+    }
 
     /// Write by name
-    /// Returns ClientResult<WriteResponse>
+    /// Returns WriteResponse
     pub fn write_by_name(&mut self, var_name: &str, data: Vec<u8>) -> ClientResult<WriteResponse> {
         let handle = self.get_var_handle(var_name)?;
         let request = Request::Write(request_factory::get_write_request(handle, data));
@@ -167,7 +196,7 @@ impl Client {
     }
 
     /// Read device info
-    /// Returns ClientResult<ReadDeviceInfoResponse>
+    /// Returns ReadDeviceInfoResponse
     pub fn read_device_info(&mut self) -> ClientResult<ReadDeviceInfoResponse> {
         let request = Request::ReadDeviceInfo(ReadDeviceInfoRequest::new());
         let response = self.request(request)?;
@@ -176,7 +205,7 @@ impl Client {
     }
 
     /// Read PLC state
-    /// Returns ClientResult<ReadStateResponse>
+    /// Returns ReadStateResponse
     pub fn read_state(&mut self) -> ClientResult<ReadStateResponse> {
         let request = Request::ReadState(ReadStateRequest::new());
         let response = self.request(request)?;
@@ -185,7 +214,7 @@ impl Client {
     }
 
     /// Write control
-    /// Returns ClientResult<WriteControlResponse>
+    /// Returns WriteControlResponse
     pub fn write_control(
         &mut self,
         ads_state: AdsState,
@@ -201,7 +230,7 @@ impl Client {
     }
 
     /// Read and write data
-    /// Returns ClientResult<>
+    /// Returns ReadWriteResponse
     pub fn read_write(
         &mut self,
         index_offset: u32,
@@ -219,7 +248,7 @@ impl Client {
     }
 
     /// Add device notification to receive updated values at value change or at a certain time interfall
-    /// Returns ClientResult<???>
+    /// Returns mpsc::receiver which can be polled
     pub fn add_device_notification(
         &mut self,
         var_name: &str,
@@ -252,6 +281,8 @@ impl Client {
         Ok(rx)
     }
 
+    /// Release a device notification on the host
+    /// Returns DeleteDeviceNotificationResponse
     pub fn delete_device_notification(
         &mut self,
         var_name: &str,
@@ -337,6 +368,7 @@ impl Client {
         }
     }
 
+    /// Gets the tx (mpsc::sender) to notify the reader thread about a new handle
     fn get_general_tx(&self) -> ClientResult<&TxGeneral> {
         if let Some(tx) = &self.tx_general {
             return Ok(tx);
@@ -344,6 +376,7 @@ impl Client {
         Err(anyhow!(AdsError::AdsErrClientError)) //ToDo create better error
     }
 
+    /// Gets the tx (mpsc::sender) to notify the reader thread about a new notification handle
     fn get_notification_tx(&self) -> ClientResult<&TxNotification> {
         if let Some(tx) = &self.tx_notification {
             return Ok(tx);

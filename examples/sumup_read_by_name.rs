@@ -3,7 +3,7 @@ use ads_proto::{
     error::AdsError,
     proto::ams_address::{AmsAddress, AmsNetId},
 };
-use std::net::Ipv4Addr;
+use std::{collections::HashMap, net::Ipv4Addr};
 
 fn main() {
     //Create client
@@ -14,21 +14,23 @@ fn main() {
     client.connect().expect("Failed to connect!");
 
     //var name and length
-    let var = "Main.counter";
-    let len = 2;
+    let mut var_names = HashMap::new();
+    var_names.insert("Main.counter".to_string(), 2);
+    var_names.insert("Main.mi_uint".to_string(), 2);
+    var_names.insert("Main.mb_bool".to_string(), 1);
 
     //read data by name
     let iterations = 10;
-    println!("Read var {:?} {:?} times", var, iterations);
+    let mut results: Vec<HashMap<String, Vec<u8>>> = Vec::new();
     for _ in 0..iterations {
-        match client.read_by_name(var, len) {
+        match client.sumup_read_by_name(&var_names) {
             Ok(r) => {
-                println!("{:?}", r);
+                results.push(r);                
             }
             Err(e) => {
                 if e.is::<AdsError>() {
                     if let Some(e) = e.downcast_ref::<AdsError>() {
-                        println!("Ads Error{:?}", e);
+                        println!("Some Ads Error{:?}", e);
                         if client.connect().is_ok() {
                             println!("Reconnected...");
                         } else {
@@ -41,7 +43,11 @@ fn main() {
         }
     }
 
+    for r in results {
+        println!("{:?}", r);
+    }
+
     //Release handle if not needed anymore
-    let result = client.release_handle(var);
-    println!("{:?}", result.unwrap());
+    //let result = client.release_handle(var);
+    //println!("{:?}", result.unwrap());
 }
