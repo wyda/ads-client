@@ -8,8 +8,9 @@ use std::{collections::HashMap, net::Ipv4Addr};
 fn main() {
     //Create client
     let ams_address = AmsAddress::new(AmsNetId::new(192, 168, 0, 150, 1, 1), 851);
-    let ipv4 = Ipv4Addr::new(192, 168, 0, 150);
-    let mut client = Client::new(ams_address, ipv4);
+    //let ipv4 = Ipv4Addr::new(192, 168, 0, 150);
+    //let mut client = Client::new(ams_address, Some(ipv4));
+    let mut client = Client::new(ams_address, None);
     //Connect client
     client.connect().expect("Failed to connect!");
 
@@ -25,7 +26,7 @@ fn main() {
     for _ in 0..iterations {
         match client.sumup_read_by_name(&var_names) {
             Ok(r) => {
-                results.push(r);                
+                results.push(r);
             }
             Err(e) => {
                 if e.is::<AdsError>() {

@@ -18,6 +18,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use std::collections::HashMap;
 use std::io::Write;
 use std::net::{Ipv4Addr, Shutdown, SocketAddr, TcpStream};
+use std::str::FromStr;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
@@ -35,7 +36,7 @@ type TxStreamUpdate = Sender<TcpStream>;
 
 #[derive(Debug)]
 pub struct Client {
-    route: Ipv4Addr,
+    route: Option<Ipv4Addr>,
     ams_targed_address: AmsAddress,
     ams_source_address: AmsAddress,
     stream: Option<TcpStream>,
@@ -57,7 +58,7 @@ impl Drop for Client {
 }
 
 impl Client {
-    pub fn new(ams_targed_address: AmsAddress, route: Ipv4Addr) -> Self {
+    pub fn new(ams_targed_address: AmsAddress, route: Option<Ipv4Addr>) -> Self {
         Client {
             route,
             ams_targed_address,
@@ -73,16 +74,21 @@ impl Client {
         }
     }
 
-    /// Connect to host.
+    /// Connect to host and start reader thread.
     /// Fails if host is not reachable or if the reader thread can't be started.
     pub fn connect(&mut self) -> ClientResult<ReadStateResponse> {
         if self.stream.is_none() {
             self.stream = Some(self.create_stream()?);
+            if self.route == Some(Ipv4Addr::from_str("127.0.0.1")?) {
+                self.open_local_port()?;
+            }
         }
 
         if let Some(stream) = &self.stream {
-            self.ams_source_address
-                .update_from_socket_addr(stream.local_addr()?)?;
+            if self.route != Some(Ipv4Addr::from_str("127.0.0.1")?) {
+                self.ams_source_address
+                    .update_from_socket_addr(stream.local_addr()?)?;
+            }
 
             if !self.thread_started {
                 let (tx, rx) = channel::<(u32, Sender<ClientResult<Response>>)>();
@@ -104,12 +110,35 @@ impl Client {
     }
 
     /// Creates and configures the TCP stream
-    fn create_stream(&self) -> ClientResult<TcpStream> {
-        let stream = TcpStream::connect(SocketAddr::from((self.route, ADS_TCP_SERVER_PORT)))?;
+    fn create_stream(&mut self) -> ClientResult<TcpStream> {
+        let mut route = Ipv4Addr::from_str("127.0.0.1")?;
+        if let Some(r) = self.route {
+            route = r;
+        } else {
+            self.route = Some(route);
+        }
+
+        let stream = TcpStream::connect(SocketAddr::from((route, ADS_TCP_SERVER_PORT)))?;
         stream.set_nodelay(true)?;
         stream.set_write_timeout(Some(Duration::from_millis(1000)))?;
         stream.set_read_timeout(Some(Duration::from_millis(1000)))?;
         Ok(stream)
+    }
+
+    /// open port in case of local machine
+    fn open_local_port(&mut self) -> ClientResult<()> {
+        let request_port_msg = [0, 16, 2, 0, 0, 0, 0, 0];
+        let mut buf = [0; 14];
+
+        if let Some(s) = &mut self.stream {
+            s.write_all(&request_port_msg).unwrap();
+            use std::io::Read;
+            s.read_exact(&mut buf)?;
+            let (_, mut buf_split) = buf.split_at(6);
+            let ams_address = AmsAddress::read_from(&mut buf_split);
+            self.ams_source_address = ams_address.unwrap();
+        }
+        Ok(())
     }
 
     /// Sends a reqest to the remote device and returns a Result<Response>
