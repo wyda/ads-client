@@ -79,13 +79,13 @@ impl Client {
     pub fn connect(&mut self) -> ClientResult<ReadStateResponse> {
         if self.stream.is_none() {
             self.stream = Some(self.create_stream()?);
-            if self.route == Some(Ipv4Addr::from_str("127.0.0.1")?) {
+            if self.route.is_none() {
                 self.open_local_port()?;
             }
         }
 
         if let Some(stream) = &self.stream {
-            if self.route != Some(Ipv4Addr::from_str("127.0.0.1")?) {
+            if self.route.is_some() {
                 self.ams_source_address
                     .update_from_socket_addr(stream.local_addr()?)?;
             }
@@ -114,8 +114,6 @@ impl Client {
         let mut route = Ipv4Addr::from_str("127.0.0.1")?;
         if let Some(r) = self.route {
             route = r;
-        } else {
-            self.route = Some(route);
         }
 
         let stream = TcpStream::connect(SocketAddr::from((route, ADS_TCP_SERVER_PORT)))?;
@@ -125,7 +123,7 @@ impl Client {
         Ok(stream)
     }
 
-    /// open port in case of local machine
+    /// open local port in case of local machine
     fn open_local_port(&mut self) -> ClientResult<()> {
         let request_port_msg = [0, 16, 2, 0, 0, 0, 0, 0];
         let mut buf = [0; 14];
@@ -142,7 +140,7 @@ impl Client {
     }
 
     /// Sends a reqest to the remote device and returns a Result<Response>
-    /// Blocks until the response has been received or on error occured
+    /// Blocks until the response has been received or on error occures
     /// Fails if no tcp stream is available.
     pub fn request(&mut self, request: Request) -> ClientResult<Response> {
         let rx = self.request_rx(request)?;
