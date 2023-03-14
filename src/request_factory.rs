@@ -1,5 +1,5 @@
 use ads_proto::ads_services::system_services::{
-    ADSIGRP_SUMUP_READEX, GET_SYMHANDLE_BY_NAME, READ_WRITE_SYMVAL_BY_HANDLE, RELEASE_SYMHANDLE,
+    ADSIGRP_SUMUP_READEX, GET_SYMHANDLE_BY_NAME, READ_WRITE_SYMVAL_BY_HANDLE, RELEASE_SYMHANDLE, ADSIGRP_SUMUP_WRITE,
 };
 use ads_proto::proto::ads_state::AdsState;
 use ads_proto::proto::ads_transition_mode::AdsTransMode;
@@ -48,13 +48,26 @@ pub fn get_read_write_request(
     )
 }
 
-pub fn get_sumup_read_write_request(
+pub fn get_sumup_read_request(
     index_offset: u32,
     read_len: u32,
     write_data: Vec<u8>,
 ) -> ReadWriteRequest {
     ReadWriteRequest::new(
         ADSIGRP_SUMUP_READEX.index_group,
+        index_offset,
+        read_len,
+        write_data,
+    )
+}
+
+pub fn get_sumup_write_request(
+    index_offset: u32,
+    read_len: u32,
+    write_data: Vec<u8>,
+) -> ReadWriteRequest {
+    ReadWriteRequest::new(
+        ADSIGRP_SUMUP_WRITE.index_group,
         index_offset,
         read_len,
         write_data,

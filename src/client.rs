@@ -6,12 +6,12 @@ use ads_proto::proto::ads_transition_mode::AdsTransMode;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::proto_traits::*;
-use ads_proto::proto::request::{ReadDeviceInfoRequest, ReadRequest, ReadStateRequest, Request};
+use ads_proto::proto::request::{ReadDeviceInfoRequest, ReadRequest, ReadStateRequest, Request, WriteRequest};
 use ads_proto::proto::response::Response;
 use ads_proto::proto::response::*;
 use ads_proto::proto::state_flags::StateFlags;
-use ads_proto::proto::sumup::sumup_request::SumupReadRequest;
-use ads_proto::proto::sumup::sumup_response::SumupReadResponse;
+use ads_proto::proto::sumup::sumup_request::{SumupReadRequest, SumupWriteRequest};
+use ads_proto::proto::sumup::sumup_response::{SumupReadResponse, SumupWriteResponse};
 use anyhow::Error;
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -179,36 +179,42 @@ impl Client {
         Ok(read_response)
     }
 
-    /// Read a list of var value by names.
-    /// Returns ReadWriteResponse
+    /// Read a list of var values by name.
+    /// Returns a HashMap<String, ReadResponse>
     pub fn sumup_read_by_name(
         &mut self,
-        var_names: &HashMap<String, u32>,
-    ) -> ClientResult<HashMap<String, Vec<u8>>> {
+        var_list: &HashMap<String, u32>,
+    ) -> ClientResult<HashMap<String, ReadResponse>> {
         let mut requests: Vec<ReadRequest> = Vec::new();
-        for (varname, length) in var_names {
+        for (varname, length) in var_list {
             let handle = self.get_var_handle(varname.as_str())?;
             requests.push(get_read_request(handle, *length));
         }
 
-        let sumup_request = SumupReadRequest::new(requests);
         let mut buf = Vec::new();
+        let sumup_request = SumupReadRequest::new(requests);
         sumup_request.write_to(&mut buf)?;
-        let request = Request::ReadWrite(get_sumup_read_write_request(
+        let request = Request::ReadWrite(get_sumup_read_request(
             sumup_request.request_count(),
             sumup_request.expected_response_len(),
             buf,
         ));
         let response = self.request(request)?;
-        let read_response: ReadWriteResponse = response.try_into()?;
-        let sumup_read_response = SumupReadResponse::read_from(&mut read_response.data.as_slice())?;
-        let mut result: HashMap<String, Vec<u8>> = HashMap::new();
-        for (n, (name, _)) in var_names.iter().enumerate() {
-            result.insert(
-                name.clone(),
-                sumup_read_response.read_responses[n].data.clone(),
-            );
-        }
+        let read_write_response: ReadWriteResponse = response.try_into()?;
+        let sumup_read_response = SumupReadResponse::read_from(&mut read_write_response.data.as_slice())?;
+        let mut result: HashMap<String, ReadResponse> = HashMap::new();
+
+        if read_write_response.result == AdsError::ErrNoError {
+            for (n, (name, _)) in var_list.iter().enumerate() {
+                result.insert(
+                    name.clone(),
+                    sumup_read_response.read_responses[n].clone(),
+                );
+            }
+        }    
+        else{
+            return Err(anyhow![read_write_response.result]);
+        }    
         Ok(result)
     }
 
@@ -220,6 +226,42 @@ impl Client {
         let response = self.request(request)?;
         let write_response: WriteResponse = response.try_into()?;
         Ok(write_response)
+    }
+
+    /// Write a list of var values by name.
+    /// Returns a HashMap<String, WriteResponse>
+    pub fn sumup_write_by_name(&mut self, var_list: HashMap<String, Vec<u8>>) -> ClientResult<HashMap<String, WriteResponse>> {
+        let mut requests: Vec<WriteRequest> = Vec::new();
+        for (varname, data) in &var_list {
+            let handle = self.get_var_handle(varname.as_str())?;
+            requests.push(get_write_request(handle, data.clone()));
+        }
+
+        let mut buf = Vec::new();
+        let sumup_request = SumupWriteRequest::new(requests);
+        sumup_request.write_to(&mut buf)?;
+        let request = Request::ReadWrite(get_sumup_write_request(
+            sumup_request.request_count(),
+            sumup_request.expected_response_len(),
+            buf,
+        ));       
+        let response = self.request(request)?;
+        let read_write_response: ReadWriteResponse = response.try_into()?;        
+        let sumup_write_response = SumupWriteResponse::read_from(&mut read_write_response.data.as_slice())?;        
+        let mut result: HashMap<String, WriteResponse> = HashMap::new();    
+
+        if read_write_response.result == AdsError::ErrNoError {
+            for (n, (name, _)) in var_list.iter().enumerate() {            
+                result.insert(
+                    name.clone(),
+                    sumup_write_response.write_responses[n].clone(),
+                );
+            }            
+        }
+        else{
+            return Err(anyhow![read_write_response.result]);        
+        }            
+        Ok(result)
     }
 
     /// Read device info

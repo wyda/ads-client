@@ -1,7 +1,7 @@
 use ads_client::client::Client;
 use ads_proto::{
     error::AdsError,
-    proto::{ams_address::{AmsAddress, AmsNetId}, response::ReadResponse},
+    proto::{ams_address::{AmsAddress, AmsNetId}, response::WriteResponse},
 };
 use std::{collections::HashMap, net::Ipv4Addr};
 
@@ -15,16 +15,16 @@ fn main() {
     client.connect().expect("Failed to connect!");
 
     //var name and length
-    let mut var_names = HashMap::new();
-    var_names.insert("Main.counter".to_string(), 2);
-    var_names.insert("Main.mi_uint".to_string(), 2);
-    var_names.insert("Main.mb_bool".to_string(), 1);
+    let mut var_names: HashMap<String, Vec<u8>> = HashMap::new();
+    var_names.insert("Main.counter".to_string(), vec![0,0]);
+    var_names.insert("Main.mi_uint".to_string(), vec![0,0]);
+    var_names.insert("Main.mb_bool".to_string(), vec![1]);
 
     //read data by name
-    let iterations = 10;
-    let mut results: Vec<HashMap<String, ReadResponse>> = Vec::new();
+    let iterations = 100;
+    let mut results: Vec<HashMap<String, WriteResponse>> = Vec::new();
     for _ in 0..iterations {
-        match client.sumup_read_by_name(&var_names) {
+        match client.sumup_write_by_name(var_names.clone()) {
             Ok(r) => {
                 results.push(r);
             }
