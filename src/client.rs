@@ -6,12 +6,18 @@ use ads_proto::proto::ads_transition_mode::AdsTransMode;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::proto_traits::*;
-use ads_proto::proto::request::{ReadDeviceInfoRequest, ReadRequest, ReadStateRequest, Request, WriteRequest};
+use ads_proto::proto::request::{
+    ReadDeviceInfoRequest, ReadRequest, ReadStateRequest, ReadWriteRequest, Request, WriteRequest,
+};
 use ads_proto::proto::response::Response;
 use ads_proto::proto::response::*;
 use ads_proto::proto::state_flags::StateFlags;
-use ads_proto::proto::sumup::sumup_request::{SumupReadRequest, SumupWriteRequest};
-use ads_proto::proto::sumup::sumup_response::{SumupReadResponse, SumupWriteResponse};
+use ads_proto::proto::sumup::sumup_request::{
+    SumupReadRequest, SumupReadWriteRequest, SumupWriteRequest,
+};
+use ads_proto::proto::sumup::sumup_response::{
+    SumupReadWriteResponse, SumupReadResponse, SumupWriteResponse,
+};
 use anyhow::Error;
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -186,9 +192,16 @@ impl Client {
         var_list: &HashMap<String, u32>,
     ) -> ClientResult<HashMap<String, ReadResponse>> {
         let mut requests: Vec<ReadRequest> = Vec::new();
-        for (varname, length) in var_list {
-            let handle = self.get_var_handle(varname.as_str())?;
-            requests.push(get_read_request(handle, *length));
+        let mut var_names: Vec<String> = Vec::new();
+        for name in var_list.keys() {
+            var_names.push(name.clone());
+        }       
+
+        let handles = self.sumup_get_var_handle(&var_names)?;
+        for (var, length) in var_list {
+            if let Some(h) = handles.get(var) {
+                requests.push(get_read_request(*h, *length));
+            }
         }
 
         let mut buf = Vec::new();
@@ -201,20 +214,17 @@ impl Client {
         ));
         let response = self.request(request)?;
         let read_write_response: ReadWriteResponse = response.try_into()?;
-        let sumup_read_response = SumupReadResponse::read_from(&mut read_write_response.data.as_slice())?;
+        let sumup_read_response =
+            SumupReadResponse::read_from(&mut read_write_response.data.as_slice())?;
         let mut result: HashMap<String, ReadResponse> = HashMap::new();
 
         if read_write_response.result == AdsError::ErrNoError {
             for (n, (name, _)) in var_list.iter().enumerate() {
-                result.insert(
-                    name.clone(),
-                    sumup_read_response.read_responses[n].clone(),
-                );
+                result.insert(name.clone(), sumup_read_response.read_responses[n].clone());
             }
-        }    
-        else{
+        } else {
             return Err(anyhow![read_write_response.result]);
-        }    
+        }
         Ok(result)
     }
 
@@ -230,7 +240,10 @@ impl Client {
 
     /// Write a list of var values by name.
     /// Returns a HashMap<String, WriteResponse>
-    pub fn sumup_write_by_name(&mut self, var_list: HashMap<String, Vec<u8>>) -> ClientResult<HashMap<String, WriteResponse>> {
+    pub fn sumup_write_by_name(
+        &mut self,
+        var_list: HashMap<String, Vec<u8>>,
+    ) -> ClientResult<HashMap<String, WriteResponse>> {
         let mut requests: Vec<WriteRequest> = Vec::new();
         for (varname, data) in &var_list {
             let handle = self.get_var_handle(varname.as_str())?;
@@ -244,23 +257,23 @@ impl Client {
             sumup_request.request_count(),
             sumup_request.expected_response_len(),
             buf,
-        ));       
+        ));
         let response = self.request(request)?;
-        let read_write_response: ReadWriteResponse = response.try_into()?;        
-        let sumup_write_response = SumupWriteResponse::read_from(&mut read_write_response.data.as_slice())?;        
-        let mut result: HashMap<String, WriteResponse> = HashMap::new();    
+        let read_write_response: ReadWriteResponse = response.try_into()?;
+        let sumup_write_response =
+            SumupWriteResponse::read_from(&mut read_write_response.data.as_slice())?;
+        let mut result: HashMap<String, WriteResponse> = HashMap::new();
 
         if read_write_response.result == AdsError::ErrNoError {
-            for (n, (name, _)) in var_list.iter().enumerate() {            
+            for (n, (name, _)) in var_list.iter().enumerate() {
                 result.insert(
                     name.clone(),
                     sumup_write_response.write_responses[n].clone(),
                 );
-            }            
+            }
+        } else {
+            return Err(anyhow![read_write_response.result]);
         }
-        else{
-            return Err(anyhow![read_write_response.result]);        
-        }            
         Ok(result)
     }
 
@@ -380,7 +393,31 @@ impl Client {
         }
     }
 
-    /// Request new var handle from host
+    fn sumup_get_var_handle(
+        &mut self,
+        var_names: &Vec<String>,
+    ) -> ClientResult<HashMap<String, u32>> {
+        let mut do_request: Vec<String> = Vec::new();
+        let mut handles: HashMap<String, u32> = HashMap::new();
+        for var in var_names {
+            if let Some(handle) = self.handle_list.get(var) {
+                handles.insert(var.clone(), *handle);
+            } else {
+                do_request.push(var.clone());
+            }
+        }
+
+        if !do_request.is_empty() {
+            let requested_handles = self.sumup_request_var_handle(&do_request)?;
+            for (name, handle) in requested_handles {
+                self.handle_list.insert(name.clone(), handle);
+                handles.insert(name, handle);
+            }
+        }
+        Ok(handles)
+    }
+
+    /// Request new var handle
     fn request_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         let request = Request::ReadWrite(get_var_handle_request(var_name));
         let response: ReadWriteResponse = self.request(request)?.try_into()?;
@@ -392,6 +429,46 @@ impl Client {
             "Failed to get var handle! Variable {} not found!",
             var_name
         ))
+    }
+
+    /// Sumup a var handle request
+    fn sumup_request_var_handle(
+        &mut self,
+        var_list: &Vec<String>,
+    ) -> ClientResult<HashMap<String, u32>> {
+        let mut requests: Vec<ReadWriteRequest> = Vec::new();
+        for var in var_list {
+            requests.push(get_var_handle_request(var));
+        }
+
+        let mut buf = Vec::new();
+        let sumup_request = SumupReadWriteRequest::new(requests);
+        sumup_request.write_to(&mut buf)?;
+        let request = Request::ReadWrite(get_sumup_write_request(
+            sumup_request.request_count(),
+            sumup_request.expected_response_len(),
+            buf,
+        ));
+        let response = self.request(request)?;
+        let read_write_response: ReadWriteResponse = response.try_into()?;
+        let sumup_read_response =
+            SumupReadWriteResponse::read_from(&mut read_write_response.data.as_slice())?;
+        let mut result: HashMap<String, u32> = HashMap::new();
+
+        if read_write_response.result == AdsError::ErrNoError {
+            for (n, name) in var_list.iter().enumerate() {
+                result.insert(
+                    name.clone(),
+                    sumup_read_response.read_write_responses[n]
+                        .data
+                        .as_slice()
+                        .read_u32::<LittleEndian>()?,
+                );
+            }
+        } else {
+            return Err(anyhow![read_write_response.result]);
+        }
+        Ok(result)
     }
 
     /// Release var handle

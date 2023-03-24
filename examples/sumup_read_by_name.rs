@@ -1,7 +1,10 @@
 use ads_client::client::Client;
 use ads_proto::{
     error::AdsError,
-    proto::{ams_address::{AmsAddress, AmsNetId}, response::ReadResponse},
+    proto::{
+        ams_address::{AmsAddress, AmsNetId},
+        response::ReadResponse,
+    },
 };
 use std::{collections::HashMap, net::Ipv4Addr};
 
@@ -31,7 +34,7 @@ fn main() {
             Err(e) => {
                 if e.is::<AdsError>() {
                     if let Some(e) = e.downcast_ref::<AdsError>() {
-                        println!("Some Ads Error{:?}", e);
+                        println!("Some Ads Error: {:?}", e);
                         if client.connect().is_ok() {
                             println!("Reconnected...");
                         } else {
@@ -39,7 +42,7 @@ fn main() {
                         }
                     }
                 }
-                println!("Other Error{:?}", e);
+                println!("Other Error: {:?}", e);
             }
         }
     }

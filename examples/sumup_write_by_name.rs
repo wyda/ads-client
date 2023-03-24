@@ -1,7 +1,10 @@
 use ads_client::client::Client;
 use ads_proto::{
     error::AdsError,
-    proto::{ams_address::{AmsAddress, AmsNetId}, response::WriteResponse},
+    proto::{
+        ams_address::{AmsAddress, AmsNetId},
+        response::WriteResponse,
+    },
 };
 use std::{collections::HashMap, net::Ipv4Addr};
 
@@ -16,8 +19,8 @@ fn main() {
 
     //var name and length
     let mut var_names: HashMap<String, Vec<u8>> = HashMap::new();
-    var_names.insert("Main.counter".to_string(), vec![0,0]);
-    var_names.insert("Main.mi_uint".to_string(), vec![0,0]);
+    var_names.insert("Main.counter".to_string(), vec![0, 0]);
+    var_names.insert("Main.mi_uint".to_string(), vec![0, 0]);
     var_names.insert("Main.mb_bool".to_string(), vec![1]);
 
     //read data by name
