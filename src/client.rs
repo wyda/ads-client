@@ -7,17 +7,13 @@ use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::ams_header::{AmsHeader, AmsTcpHeader};
 use ads_proto::proto::proto_traits::*;
 use ads_proto::proto::request::{
-    ReadDeviceInfoRequest, ReadRequest, ReadStateRequest, ReadWriteRequest, Request, WriteRequest,
+    ReadDeviceInfoRequest, ReadRequest, ReadStateRequest, Request, WriteRequest,
 };
 use ads_proto::proto::response::Response;
 use ads_proto::proto::response::*;
 use ads_proto::proto::state_flags::StateFlags;
-use ads_proto::proto::sumup::sumup_request::{
-    SumupReadRequest, SumupReadWriteRequest, SumupWriteRequest,
-};
-use ads_proto::proto::sumup::sumup_response::{
-    SumupReadWriteResponse, SumupReadResponse, SumupWriteResponse,
-};
+use ads_proto::proto::sumup::sumup_request::{SumupReadRequest, SumupWriteRequest};
+use ads_proto::proto::sumup::sumup_response::{SumupReadResponse, SumupWriteResponse};
 use anyhow::Error;
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -195,7 +191,7 @@ impl Client {
         let mut var_names: Vec<String> = Vec::new();
         for name in var_list.keys() {
             var_names.push(name.clone());
-        }       
+        }
 
         let handles = self.sumup_get_var_handle(&var_names)?;
         for (var, length) in var_list {
@@ -432,41 +428,19 @@ impl Client {
     }
 
     /// Sumup a var handle request
+    /// Not really a sumup request. This methode send for each handle request a tx.
+
+    // To Do. Is there a way to perform a real sumup for handle request?
     fn sumup_request_var_handle(
         &mut self,
         var_list: &Vec<String>,
     ) -> ClientResult<HashMap<String, u32>> {
-        let mut requests: Vec<ReadWriteRequest> = Vec::new();
-        for var in var_list {
-            requests.push(get_var_handle_request(var));
-        }
-
-        let mut buf = Vec::new();
-        let sumup_request = SumupReadWriteRequest::new(requests);
-        sumup_request.write_to(&mut buf)?;
-        let request = Request::ReadWrite(get_sumup_write_request(
-            sumup_request.request_count(),
-            sumup_request.expected_response_len(),
-            buf,
-        ));
-        let response = self.request(request)?;
-        let read_write_response: ReadWriteResponse = response.try_into()?;
-        let sumup_read_response =
-            SumupReadWriteResponse::read_from(&mut read_write_response.data.as_slice())?;
         let mut result: HashMap<String, u32> = HashMap::new();
-
-        if read_write_response.result == AdsError::ErrNoError {
-            for (n, name) in var_list.iter().enumerate() {
-                result.insert(
-                    name.clone(),
-                    sumup_read_response.read_write_responses[n]
-                        .data
-                        .as_slice()
-                        .read_u32::<LittleEndian>()?,
-                );
-            }
-        } else {
-            return Err(anyhow![read_write_response.result]);
+        for var in var_list {
+            let response = self.request(Request::ReadWrite(get_var_handle_request(var)))?;
+            let handle: ReadWriteResponse = response.try_into()?;
+            let handle = handle.data.as_slice().read_u32::<LittleEndian>()?;
+            result.insert(var.clone(), handle);
         }
         Ok(result)
     }
