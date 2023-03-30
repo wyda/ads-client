@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use ads_client::client::Client;
 use ads_proto::{
     error::AdsError,

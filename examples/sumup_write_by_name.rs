@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use ads_client::client::Client;
 use ads_proto::{
     error::AdsError,
@@ -24,7 +25,7 @@ fn main() {
     var_names.insert("Main.mb_bool".to_string(), vec![1]);
 
     //read data by name
-    let iterations = 100;
+    let iterations = 10;
     let mut results: Vec<HashMap<String, WriteResponse>> = Vec::new();
     for _ in 0..iterations {
         match client.sumup_write_by_name(var_names.clone()) {

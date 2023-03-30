@@ -128,9 +128,8 @@ fn read(tcp_stream: &mut TcpStream) -> Result<AmsHeader, std::io::Error> {
     //ToDo update when ads-proto v0.1.1
     let mut buf = vec![0; AMS_TCP_HEADER_SIZE]; //reserved + length
     tcp_stream.read_exact(&mut buf)?;
-    let mut slice = buf.as_slice();
-    let _ = slice.read_u16::<LittleEndian>(); //first 2 bytes are not needed
-    let length = slice.read_u32::<LittleEndian>()?;
+    let mut length = &buf[2..6];
+    let length = length.read_u32::<LittleEndian>()?;
     let mut buf: Vec<u8> = vec![0; length as usize];
     tcp_stream.read_exact(&mut buf)?;
     let ams_header = AmsHeader::read_from(&mut buf.as_slice())?;

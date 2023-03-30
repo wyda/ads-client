@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use ads_client::client::Client;
 use ads_proto::{
     error::AdsError,
@@ -7,7 +8,6 @@ use ads_proto::{
     },
 };
 use std::{collections::HashMap, net::Ipv4Addr};
-
 fn main() {
     //Create client
     let ams_address = AmsAddress::new(AmsNetId::new(192, 168, 0, 150, 1, 1), 851);

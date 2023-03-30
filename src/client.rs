@@ -429,8 +429,7 @@ impl Client {
 
     /// Sumup a var handle request
     /// Not really a sumup request. This methode send for each handle request a tx.
-
-    // To Do. Is there a way to perform a real sumup for handle request?
+    // To Do. Is there a way to perform a sumup for handle requests?
     fn sumup_request_var_handle(
         &mut self,
         var_list: &Vec<String>,

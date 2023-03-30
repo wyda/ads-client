@@ -6,6 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ads-proto = { git = "https://github.com/wyda/ads-proto.git" }
+ads-proto = "0.1.1"
 anyhow = "1.0.57"
 byteorder = "1.4.3"

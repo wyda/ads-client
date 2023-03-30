@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 use ads_client::client::Client;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -21,9 +22,6 @@ fn main() {
     let handle = handle.data.as_slice().read_u16::<LittleEndian>().unwrap();
     println!("The var hadle for {:?} is {:?}", var_name, handle);
 
-    use std::thread::sleep;
-    use std::time::Duration;
-    sleep(Duration::from_millis(20000));
     let handle = client
         .read_write(0, 4, var_name.as_bytes().to_vec())
         .unwrap();
