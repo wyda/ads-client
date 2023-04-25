@@ -143,7 +143,7 @@ impl Client {
         Ok(())
     }
 
-    /// Sends a request and returns a Result<Response>
+    /// Sends the supplied request
     /// Blocks until the response has been received or on error occures
     /// Fails if no tcp stream is available.
     pub fn request(&mut self, request: Request) -> ClientResult<Response> {
