@@ -2,6 +2,11 @@
 name = "ads-client"
 version = "0.1.0"
 edition = "2021"
+description = "Beckhoff ADS client to communicate with a TwinCat PLC or other ADS devices"
+repository = "https://github.com/wyda/ads-client"
+readme = "README.md"
+license = "MIT" 
+keywords = ["Beckhoff", "ADS", "TwinCat", "Client"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
