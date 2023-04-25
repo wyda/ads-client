@@ -7,11 +7,12 @@ use ads_proto::proto::{
 use std::net::Ipv4Addr;
 
 fn main() {
-    //Create client
+    //Create client. If route = None then targed is local machine
     let ams_address = AmsAddress::new(AmsNetId::new(192, 168, 0, 150, 1, 1), 851);
     //let ipv4 = Ipv4Addr::new(192, 168, 0, 150);
     //let mut client = Client::new(ams_address, Some(ipv4));
     let mut client = Client::new(ams_address, None);
+
     //Connect client
     client.connect().expect("Failed to connect!");
 
@@ -19,10 +20,12 @@ fn main() {
     let var = "Main.counter";
     let len = 2;
 
+    //Subscribe to get notifications when "Main.counter" changes
     let rx = client
         .add_device_notification(var, len, AdsTransMode::OnChange, 1, 1)
         .unwrap();
 
+    //Poll the mpsc receiver for new values
     println!("Receive data...\n");
     let mut list = Vec::new();
     for _ in 1..10 {
@@ -35,7 +38,8 @@ fn main() {
         println!("{:?}", r);
     }
 
-    println!("\nNow delete the notification");
+    //Unsubscribe notifications
+    println!("\nDelete the notification");
     let response = client.delete_device_notification(var);
     println!("{:?}", response);
 }

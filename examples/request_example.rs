@@ -6,7 +6,7 @@ use ads_proto::proto::request::*;
 use std::net::Ipv4Addr;
 
 fn main() {
-    //Create client
+    //Create client. If route = None then targed is local machine
     let ams_address = AmsAddress::new(AmsNetId::new(192, 168, 0, 150, 1, 1), 851);
     //let ipv4 = Ipv4Addr::new(192, 168, 0, 150);
     //let mut client = Client::new(ams_address, Some(ipv4));
@@ -14,7 +14,7 @@ fn main() {
     //Connect client
     client.connect().expect("Failed to connect!");
 
-    //Create requests
+    //Create the requests manually and supply them to your request
     let mut request_queue = Vec::new();
     request_queue.push(Request::ReadDeviceInfo(ReadDeviceInfoRequest::new()));
     request_queue.push(Request::ReadState(ReadStateRequest::new()));

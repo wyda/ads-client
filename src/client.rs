@@ -60,6 +60,8 @@ impl Drop for Client {
 }
 
 impl Client {
+    /// Setup a new client. This will will not yet connect to the targed.
+    /// Call connect() after creation.
     pub fn new(ams_targed_address: AmsAddress, route: Option<Ipv4Addr>) -> Self {
         Client {
             route,
@@ -111,7 +113,7 @@ impl Client {
         }
     }
 
-    /// Creates and configures the TCP stream
+    /// Create the TCP stream
     fn create_stream(&mut self) -> ClientResult<TcpStream> {
         let mut route = Ipv4Addr::from_str("127.0.0.1")?;
         if let Some(r) = self.route {
@@ -141,7 +143,7 @@ impl Client {
         Ok(())
     }
 
-    /// Sends a reqest to the remote device and returns a Result<Response>
+    /// Sends a request and returns a Result<Response>
     /// Blocks until the response has been received or on error occures
     /// Fails if no tcp stream is available.
     pub fn request(&mut self, request: Request) -> ClientResult<Response> {
@@ -151,8 +153,7 @@ impl Client {
         response
     }
 
-    /// Sends a request to the remote device
-    /// and returns imediatly a receiver object to read from (mpsc::Receiver).
+    /// Sends a request and returns imediatly a receiver object to read from (mpsc::Receiver).
     /// Fails if no tcp stream is available.
     pub fn request_rx(&mut self, request: Request) -> ClientResult<Receiver<Result<Response>>> {
         let ams_header = self.new_tcp_ams_request_header(request);
@@ -181,7 +182,7 @@ impl Client {
         Ok(read_response)
     }
 
-    /// Read a list of var values by name.
+    /// Read a list of var values by name. This will bundle all requested variables into a single request.
     /// Returns a HashMap<String, ReadResponse>
     pub fn sumup_read_by_name(
         &mut self,
@@ -234,7 +235,7 @@ impl Client {
         Ok(write_response)
     }
 
-    /// Write a list of var values by name.
+    /// Write a list of var values by name. This will bundle all the write data into a single write request.
     /// Returns a HashMap<String, WriteResponse>
     pub fn sumup_write_by_name(
         &mut self,

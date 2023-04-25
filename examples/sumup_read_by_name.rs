@@ -9,7 +9,7 @@ use ads_proto::{
 };
 use std::{collections::HashMap, net::Ipv4Addr};
 fn main() {
-    //Create client
+    //Create client. If route = None then targed is local machine
     let ams_address = AmsAddress::new(AmsNetId::new(192, 168, 0, 150, 1, 1), 851);
     //let ipv4 = Ipv4Addr::new(192, 168, 0, 150);
     //let mut client = Client::new(ams_address, Some(ipv4));
@@ -23,7 +23,7 @@ fn main() {
     var_names.insert("Main.mi_uint".to_string(), 2);
     var_names.insert("Main.mb_bool".to_string(), 1);
 
-    //read data by name
+    //read data vor all variables in the list with one (tcp) request
     let iterations = 10;
     let mut results: Vec<HashMap<String, ReadResponse>> = Vec::new();
     for _ in 0..iterations {
@@ -50,8 +50,4 @@ fn main() {
     for r in results {
         println!("{:?}", r);
     }
-
-    //Release handle if not needed anymore
-    //let result = client.release_handle(var);
-    //println!("{:?}", result.unwrap());
 }
