@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use ads_client::client::Client;
+use rust_ads_client::client::Client;
 use ads_proto::proto::{
     ads_transition_mode::AdsTransMode,
     ams_address::{AmsAddress, AmsNetId},
@@ -29,8 +29,10 @@ fn main() {
     println!("Receive data...\n");
     let mut list = Vec::new();
     for _ in 1..10 {
-        let result = rx.recv().unwrap().unwrap();
-        list.push(result.ads_stamp_headers);
+        let result = rx.recv();
+        if let Ok(r) = result.unwrap() {
+            list.push(r.ads_stamp_headers);
+        }        
     }
 
     println!("Print revceived data:\n");

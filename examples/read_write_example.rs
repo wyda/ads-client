@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use ads_client::client::Client;
+use rust_ads_client::client::Client;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::net::Ipv4Addr;

@@ -1,5 +1,5 @@
 [package]
-name = "ads-client"
+name = "rust-ads-client"
 version = "0.1.0"
 edition = "2021"
 description = "Beckhoff ADS client to communicate with a TwinCat PLC or other ADS devices"

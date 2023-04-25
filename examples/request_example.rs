@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use ads_client::client::Client;
+use rust_ads_client::client::Client;
 use ads_proto::ads_services::system_services::GET_SYMHANDLE_BY_NAME;
 use ads_proto::proto::ams_address::{AmsAddress, AmsNetId};
 use ads_proto::proto::request::*;

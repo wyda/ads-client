@@ -1,5 +1,5 @@
 #![allow(unused_imports)]
-use ads_client::client::Client;
+use rust_ads_client::client::Client;
 use ads_proto::proto::{
     ads_state::AdsState,
     ams_address::{AmsAddress, AmsNetId},
