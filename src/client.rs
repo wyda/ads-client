@@ -380,7 +380,10 @@ impl Client {
         Err(anyhow!(AdsError::AdsErrDeviceSymbolNotFound)) //??
     }
 
-    fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
+    /// Get a var handle by name.
+    /// If the handle is already known, it will be returned from the handle list.   
+    /// If the handle is not known, a request will be sent to the host to get the handle.
+    pub fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         if let Some(handle) = self.handle_list.get(var_name) {
             Ok(*handle)
         } else {
