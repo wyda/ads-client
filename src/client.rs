@@ -33,9 +33,9 @@ pub const ADS_SECURE_TCP_SERVER_PORT: u16 = 8016;
 
 pub type ClientResult<T> = Result<T, anyhow::Error>;
 type TxGeneral = Sender<(u32, Sender<ClientResult<Response>>)>;
-type TxNotification = Sender<(u32, Sender<ClientResult<AdsNotificationStream>>)>;
+type TimeStamp = u64;
+type TxNotification = Sender<(u32, Sender<ClientResult<(AdsNotificationSample, TimeStamp)>>)>;
 type TxStreamUpdate = Sender<TcpStream>;
-
 #[derive(Debug)]
 pub struct Client {
     route: Option<Ipv4Addr>,
@@ -97,7 +97,7 @@ impl Client {
             if !self.thread_started {
                 let (tx, rx) = channel::<(u32, Sender<ClientResult<Response>>)>();
                 let (tx_not, rx_not) =
-                    channel::<(u32, Sender<ClientResult<AdsNotificationStream>>)>();
+                    channel::<(u32, Sender<ClientResult<(AdsNotificationSample, TimeStamp)>>)>();
                 let (tx_tcp, rx_tcp) = channel::<TcpStream>();
                 self.tx_general = Some(tx);
                 self.tx_notification = Some(tx_not);
@@ -194,16 +194,26 @@ impl Client {
             var_names.push(name.clone());
         }
 
-        let handles = self.sumup_get_var_handle(&var_names)?;
+        let handles = self.sumup_get_var_handle(&var_names)?;      
+        let mut failed: Vec<String> = Vec::new();  
         for (var, length) in var_list {
             if let Some(h) = handles.get(var) {
-                requests.push(get_read_request(*h, *length));
+                if let Some(h) = h {
+                    requests.push(get_read_request(*h, *length));
+                } else {
+                    failed.push(var.clone());
+                }              
             }
         }
 
+        let mut var_list = var_list.clone();
+        for key in failed {
+            var_list.remove(&key);
+        }
+        
         let mut buf = Vec::new();
         let sumup_request = SumupReadRequest::new(requests);
-        sumup_request.write_to(&mut buf)?;
+        sumup_request.write_to(&mut buf)?;        
         let request = Request::ReadWrite(get_sumup_read_request(
             sumup_request.request_count(),
             sumup_request.expected_response_len(),
@@ -217,7 +227,9 @@ impl Client {
 
         if read_write_response.result == AdsError::ErrNoError {
             for (n, (name, _)) in var_list.iter().enumerate() {
-                result.insert(name.clone(), sumup_read_response.read_responses[n].clone());
+                if n < sumup_read_response.read_responses.len() {
+                    result.insert(name.clone(), sumup_read_response.read_responses[n].clone());
+                }
             }
         } else {
             return Err(anyhow![read_write_response.result]);
@@ -335,7 +347,7 @@ impl Client {
         transmission_mode: AdsTransMode,
         max_delay: u32,
         cycle_time: u32,
-    ) -> ClientResult<Receiver<Result<AdsNotificationStream, Error>>> {
+    ) -> ClientResult<Receiver<Result<(AdsNotificationSample, TimeStamp), Error>>> {
         let handle = self.get_var_handle(var_name)?;
         let request = Request::AddDeviceNotification(request_factory::get_add_device_notification(
             handle,
@@ -349,7 +361,7 @@ impl Client {
         let response: AddDeviceNotificationResponse = self.request(request)?.try_into()?;
         let handle = response.notification_handle;
         //Create mpsc channel for notifications
-        let (tx, rx) = channel::<ClientResult<AdsNotificationStream>>();
+        let (tx, rx) = channel::<ClientResult<(AdsNotificationSample, TimeStamp)>>();
         //Send tx to reader thread
         self.get_notification_tx()?
             .send((handle, tx))
@@ -380,37 +392,49 @@ impl Client {
         Err(anyhow!(AdsError::AdsErrDeviceSymbolNotFound)) //??
     }
 
+    /// Returns the notification handle for a given variable name if available in the client.
+    /// This methode will not reqeust a handle from the host. If the handle is not available, an error will be returned.
+    /// If you want to request a handle from the host, use `add_device_notification`.
+    pub fn get_notification_handle(&self, var_name: &str) -> ClientResult<u32> {
+        if let Some(handle) = self.notification_handle_list.get(var_name) {
+            return Ok(*handle);
+        }
+        Err(anyhow!(AdsError::AdsErrDeviceSymbolNotFound))
+    }
+
     /// Get a var handle by name.
     /// If the handle is already known, it will be returned from the handle list.   
     /// If the handle is not known, a request will be sent to the host to get the handle.
     pub fn get_var_handle(&mut self, var_name: &str) -> ClientResult<u32> {
         if let Some(handle) = self.handle_list.get(var_name) {
-            Ok(*handle)
+            return Ok(*handle);
         } else {
             let handle = self.request_var_handle(var_name)?;
             self.handle_list.insert(var_name.to_string(), handle);
-            Ok(handle)
+            return Ok(handle);
         }
     }
 
     fn sumup_get_var_handle(
         &mut self,
         var_names: &Vec<String>,
-    ) -> ClientResult<HashMap<String, u32>> {
+    ) -> ClientResult<HashMap<String, Option<u32>>> {
         let mut do_request: Vec<String> = Vec::new();
-        let mut handles: HashMap<String, u32> = HashMap::new();
+        let mut handles: HashMap<String, Option<u32>> = HashMap::new();
         for var in var_names {
             if let Some(handle) = self.handle_list.get(var) {
-                handles.insert(var.clone(), *handle);
+                handles.insert(var.clone(), Some(*handle));
             } else {
                 do_request.push(var.clone());
             }
         }
 
-        if !do_request.is_empty() {
-            let requested_handles = self.sumup_request_var_handle(&do_request)?;
+        if !do_request.is_empty() {            
+            let requested_handles = self.sumup_request_var_handle(&do_request)?;            
             for (name, handle) in requested_handles {
-                self.handle_list.insert(name.clone(), handle);
+                if let Some(h) = handle {
+                    self.handle_list.insert(name.clone(), h);
+                }                
                 handles.insert(name, handle);
             }
         }
@@ -437,13 +461,16 @@ impl Client {
     fn sumup_request_var_handle(
         &mut self,
         var_list: &Vec<String>,
-    ) -> ClientResult<HashMap<String, u32>> {
-        let mut result: HashMap<String, u32> = HashMap::new();
-        for var in var_list {
+    ) -> ClientResult<HashMap<String, Option<u32>>> {
+        let mut result: HashMap<String, Option<u32>> = HashMap::new();
+        for var in var_list {            
             let response = self.request(Request::ReadWrite(get_var_handle_request(var)))?;
-            let handle: ReadWriteResponse = response.try_into()?;
-            let handle = handle.data.as_slice().read_u32::<LittleEndian>()?;
-            result.insert(var.clone(), handle);
+            let handle: ReadWriteResponse = response.try_into()?;            
+            if handle.result == AdsError::ErrNoError {                
+                result.insert(var.clone(), Some(handle.data.as_slice().read_u32::<LittleEndian>()?));
+            } else {
+                result.insert(var.clone(), None);
+            }                       
         }
         Ok(result)
     }

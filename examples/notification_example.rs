@@ -31,7 +31,7 @@ fn main() {
     for _ in 1..10 {
         let result = rx.recv();
         if let Ok(r) = result.unwrap() {
-            list.push(r.ads_stamp_headers);
+            list.push(r.0);
         }        
     }
 

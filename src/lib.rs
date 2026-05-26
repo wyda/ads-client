@@ -1,3 +1,3 @@
 pub mod client;
 mod reader;
-mod request_factory;
+pub mod request_factory;

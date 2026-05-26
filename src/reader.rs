@@ -13,7 +13,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 
 type SenderTable = HashMap<u32, Sender<ClientResult<Response>>>;
-type SenderTableAdsNotification = HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>;
+type SenderTableAdsNotification = HashMap<u32, Sender<ClientResult<(AdsNotificationSample, u64)>>>;
 
 //Tcp Header size without response data
 pub const AMS_TCP_HEADER_SIZE: usize = 6;
@@ -21,7 +21,7 @@ pub const AMS_TCP_HEADER_SIZE: usize = 6;
 pub fn run_reader_thread(
     stream: TcpStream,
     rx_general: Receiver<(u32, Sender<ClientResult<Response>>)>,
-    rx_device_notification: Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
+    rx_device_notification: Receiver<(u32, Sender<ClientResult<(AdsNotificationSample, u64)>>)>,
     rx_update_tcp_stream: Receiver<TcpStream>,
 ) -> ClientResult<bool> {
     let mut stream = stream.try_clone()?;
@@ -33,7 +33,9 @@ pub fn run_reader_thread(
         loop {
             //read tcp data (blocking)
             match read(&mut stream) {
-                Ok(h) => ams_header = h,
+                Ok(h) => {
+                    ams_header = h;                    
+                }
                 Err(e) => {
                     match e.kind() {
                         ErrorKind::UnexpectedEof => {
@@ -48,7 +50,7 @@ pub fn run_reader_thread(
                                 &mut sender_table_device_notivication,
                             );
                             //Update TCP Stream
-                            stream = update_tcp_stream(&rx_update_tcp_stream, stream);
+                            stream = update_tcp_stream(&rx_update_tcp_stream, stream);                            
                             continue;
                         }
                         _ => {
@@ -63,7 +65,7 @@ pub fn run_reader_thread(
                                 &mut sender_table_device_notivication,
                             );
                             //Update TCP Stream
-                            stream = update_tcp_stream(&rx_update_tcp_stream, stream);
+                            stream = update_tcp_stream(&rx_update_tcp_stream, stream);                            
                             continue;
                         }
                     }
@@ -80,7 +82,7 @@ pub fn run_reader_thread(
 
             //Send data to client
             match ams_header.ads_error() {
-                AdsError::ErrNoError => {
+                AdsError::ErrNoError => {                    
                     forward_data(
                         &mut ams_header,
                         &mut sender_table_general,
@@ -116,8 +118,8 @@ fn update_sender_table(
 }
 
 fn update_sender_table_device_notification(
-    rx: &Receiver<(u32, Sender<ClientResult<AdsNotificationStream>>)>,
-    sender_table: &mut HashMap<u32, Sender<ClientResult<AdsNotificationStream>>>,
+    rx: &Receiver<(u32, Sender<ClientResult<(AdsNotificationSample, u64)>>)>,
+    sender_table: &mut HashMap<u32, Sender<ClientResult<(AdsNotificationSample, u64)>>>,
 ) {
     while let Ok(s) = rx.try_recv() {
         sender_table.insert(s.0, s.1);
@@ -132,7 +134,7 @@ fn read(tcp_stream: &mut TcpStream) -> Result<AmsHeader, std::io::Error> {
     let length = length.read_u32::<LittleEndian>()?;
     let mut buf: Vec<u8> = vec![0; length as usize];
     tcp_stream.read_exact(&mut buf)?;
-    let ams_header = AmsHeader::read_from(&mut buf.as_slice())?;
+    let ams_header = AmsHeader::read_from(&mut buf.as_slice())?;    
     Ok(ams_header)
 }
 
@@ -154,19 +156,19 @@ fn forward_data(
                     forward_ads_notification(
                         sender_table_device_notivication,
                         &sample.notification_handle,
-                        ads_notification.clone(),
+                        (sample.clone(), header.time_stamp),
                     );
                 }
             }
         }
-        _ => {
+        _ => {            
             forward_response(
                 sender_table_general,
                 &ams_header.invoke_id(),
                 ams_header
                     .response()
                     .expect("Not possible to extract response from AmsHeader!"),
-            );
+            );           
         }
     }
 }
@@ -174,7 +176,7 @@ fn forward_data(
 fn forward_ads_notification(
     sender_table: &mut SenderTableAdsNotification,
     id: &u32,
-    notification: AdsNotificationStream,
+    notification: (AdsNotificationSample, u64),
 ) -> bool {
     if sender_table.contains_key(id) {
         if let Some(tx) = sender_table.get(id) {
